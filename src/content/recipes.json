@@ -1,0 +1,483 @@
+[
+  {
+    "id": "breakfast-001",
+    "title": "Avocado & Egg Toast",
+    "category": "Breakfast",
+    "description": "A protein-rich breakfast perfect for breaking your fast with healthy fats and sustained energy.",
+    "ingredients": [
+      "2 slices whole grain bread",
+      "1 ripe avocado",
+      "2 large eggs",
+      "Salt and pepper to taste",
+      "Red pepper flakes (optional)",
+      "1 tbsp olive oil"
+    ],
+    "steps": [
+      "Toast the bread until golden and crispy.",
+      "While bread toasts, heat olive oil in a non-stick pan over medium heat.",
+      "Crack eggs into the pan and cook to your preference (sunny-side up or over-easy).",
+      "Halve the avocado, remove the pit, and scoop flesh onto the toast.",
+      "Mash the avocado lightly with a fork, leaving some chunks for texture.",
+      "Place the cooked eggs on top of the avocado toast.",
+      "Season with salt, pepper, and red pepper flakes if desired."
+    ],
+    "nutrition": {
+      "calories": 420,
+      "protein": 18,
+      "carbs": 32,
+      "fat": 26
+    },
+    "prepTime": "10 min",
+    "thumbnail": "avocado_egg_toast"
+  },
+  {
+    "id": "breakfast-002",
+    "title": "Greek Yogurt Power Bowl",
+    "category": "Breakfast",
+    "description": "A nutrient-dense bowl packed with protein and antioxidants — ideal for your first meal after fasting.",
+    "ingredients": [
+      "200g Greek yogurt (full fat or low fat)",
+      "1/2 cup mixed berries (blueberries, strawberries, raspberries)",
+      "2 tbsp granola",
+      "1 tbsp honey or maple syrup",
+      "1 tbsp chia seeds",
+      "1 tbsp almond butter"
+    ],
+    "steps": [
+      "Spoon Greek yogurt into a bowl.",
+      "Arrange mixed berries on top of the yogurt.",
+      "Sprinkle granola and chia seeds over the berries.",
+      "Drizzle with honey or maple syrup.",
+      "Add a dollop of almond butter on top.",
+      "Serve immediately for best texture."
+    ],
+    "nutrition": {
+      "calories": 380,
+      "protein": 22,
+      "carbs": 40,
+      "fat": 16
+    },
+    "prepTime": "5 min",
+    "thumbnail": "yogurt_power_bowl"
+  },
+  {
+    "id": "breakfast-003",
+    "title": "Spinach & Feta Omelette",
+    "category": "Breakfast",
+    "description": "A high-protein omelette loaded with greens and tangy feta cheese for a satisfying fast-breaking meal.",
+    "ingredients": [
+      "3 large eggs",
+      "1 cup fresh spinach",
+      "30g feta cheese, crumbled",
+      "1/4 cup cherry tomatoes, halved",
+      "1 tbsp butter",
+      "Salt and pepper to taste"
+    ],
+    "steps": [
+      "Whisk eggs in a bowl with a pinch of salt and pepper.",
+      "Heat butter in a non-stick pan over medium heat.",
+      "Add spinach and cook for 1 minute until slightly wilted.",
+      "Pour whisked eggs over the spinach, tilting pan to spread evenly.",
+      "Cook for 2-3 minutes until edges set.",
+      "Add feta cheese and cherry tomatoes to one half.",
+      "Fold the omelette in half and cook for another minute.",
+      "Slide onto a plate and serve."
+    ],
+    "nutrition": {
+      "calories": 350,
+      "protein": 24,
+      "carbs": 4,
+      "fat": 27
+    },
+    "prepTime": "10 min",
+    "thumbnail": "spinach_feta_omelette"
+  },
+  {
+    "id": "lunch-001",
+    "title": "Grilled Chicken Salad",
+    "category": "Lunch",
+    "description": "A hearty salad with grilled chicken, mixed greens, and a light vinaigrette — balanced nutrition in every bite.",
+    "ingredients": [
+      "150g chicken breast",
+      "4 cups mixed salad greens",
+      "1/2 cucumber, sliced",
+      "1/2 cup cherry tomatoes, halved",
+      "1/4 red onion, thinly sliced",
+      "1/4 avocado, sliced",
+      "2 tbsp olive oil",
+      "1 tbsp balsamic vinegar",
+      "Salt and pepper to taste"
+    ],
+    "steps": [
+      "Season chicken breast with salt and pepper.",
+      "Grill or pan-fry chicken for 6-7 minutes per side until cooked through.",
+      "Let chicken rest for 5 minutes, then slice.",
+      "Arrange mixed greens on a plate.",
+      "Top with cucumber, cherry tomatoes, red onion, and avocado.",
+      "Place sliced chicken on top of the salad.",
+      "Whisk olive oil and balsamic vinegar together for dressing.",
+      "Drizzle dressing over the salad and serve."
+    ],
+    "nutrition": {
+      "calories": 450,
+      "protein": 38,
+      "carbs": 12,
+      "fat": 28
+    },
+    "prepTime": "20 min",
+    "thumbnail": "grilled_chicken_salad"
+  },
+  {
+    "id": "lunch-002",
+    "title": "Quinoa Buddha Bowl",
+    "category": "Lunch",
+    "description": "A colourful plant-based bowl with quinoa, roasted vegetables, and tahini dressing for sustained energy.",
+    "ingredients": [
+      "1/2 cup quinoa (dry)",
+      "1 cup water",
+      "1/2 sweet potato, cubed",
+      "1 cup broccoli florets",
+      "1/2 cup chickpeas (canned, drained)",
+      "1 tbsp olive oil",
+      "2 tbsp tahini",
+      "1 tbsp lemon juice",
+      "Salt and pepper to taste"
+    ],
+    "steps": [
+      "Preheat oven to 200°C (400°F).",
+      "Cook quinoa: bring water to a boil, add quinoa, reduce heat, cover and simmer for 15 minutes.",
+      "Toss sweet potato and broccoli with olive oil, salt, and pepper.",
+      "Spread vegetables on a baking tray and roast for 20 minutes.",
+      "Mix tahini with lemon juice and 1 tbsp water to make dressing.",
+      "Assemble bowl: quinoa base, roasted vegetables, and chickpeas.",
+      "Drizzle tahini dressing over the top.",
+      "Season with additional salt and pepper if needed."
+    ],
+    "nutrition": {
+      "calories": 520,
+      "protein": 18,
+      "carbs": 62,
+      "fat": 22
+    },
+    "prepTime": "35 min",
+    "thumbnail": "quinoa_buddha_bowl"
+  },
+  {
+    "id": "lunch-003",
+    "title": "Tuna & White Bean Salad",
+    "category": "Lunch",
+    "description": "A quick, no-cook lunch packed with protein and fibre — perfect for busy days during your eating window.",
+    "ingredients": [
+      "1 can (170g) tuna in olive oil, drained",
+      "1 can (400g) white beans, drained and rinsed",
+      "1/2 red onion, finely diced",
+      "1 cup rocket (arugula)",
+      "2 tbsp extra virgin olive oil",
+      "1 tbsp red wine vinegar",
+      "1 tbsp fresh parsley, chopped",
+      "Salt and pepper to taste"
+    ],
+    "steps": [
+      "Drain and flake the tuna into a large bowl.",
+      "Add drained white beans to the bowl.",
+      "Add diced red onion and rocket.",
+      "Whisk together olive oil and red wine vinegar.",
+      "Pour dressing over the salad and toss gently.",
+      "Season with salt and pepper.",
+      "Garnish with fresh parsley and serve."
+    ],
+    "nutrition": {
+      "calories": 410,
+      "protein": 35,
+      "carbs": 30,
+      "fat": 16
+    },
+    "prepTime": "10 min",
+    "thumbnail": "tuna_white_bean_salad"
+  },
+  {
+    "id": "dinner-001",
+    "title": "Baked Salmon with Roasted Vegetables",
+    "category": "Dinner",
+    "description": "Omega-3 rich salmon paired with colourful roasted vegetables for a nutritious dinner within your eating window.",
+    "ingredients": [
+      "200g salmon fillet",
+      "1 cup broccoli florets",
+      "1 medium carrot, sliced",
+      "1/2 red bell pepper, sliced",
+      "2 tbsp olive oil",
+      "1 clove garlic, minced",
+      "1 tbsp lemon juice",
+      "Fresh dill (optional)",
+      "Salt and pepper to taste"
+    ],
+    "steps": [
+      "Preheat oven to 200°C (400°F).",
+      "Place salmon on a lined baking tray. Season with salt, pepper, garlic, and lemon juice.",
+      "Toss broccoli, carrot, and bell pepper with olive oil, salt, and pepper.",
+      "Arrange vegetables around the salmon on the tray.",
+      "Bake for 15-18 minutes until salmon is cooked through and flakes easily.",
+      "Garnish with fresh dill if desired.",
+      "Serve immediately."
+    ],
+    "nutrition": {
+      "calories": 480,
+      "protein": 40,
+      "carbs": 15,
+      "fat": 28
+    },
+    "prepTime": "25 min",
+    "thumbnail": "baked_salmon_vegetables"
+  },
+  {
+    "id": "dinner-002",
+    "title": "Turkey Stir-Fry with Brown Rice",
+    "category": "Dinner",
+    "description": "A lean protein stir-fry with crisp vegetables served over brown rice — filling and nutritious.",
+    "ingredients": [
+      "200g turkey breast, sliced thin",
+      "1 cup brown rice (cooked)",
+      "1 cup mixed stir-fry vegetables (bell peppers, snap peas, mushrooms)",
+      "2 tbsp soy sauce (low sodium)",
+      "1 tbsp sesame oil",
+      "1 tsp fresh ginger, grated",
+      "1 clove garlic, minced",
+      "1 tsp cornstarch mixed with 2 tbsp water"
+    ],
+    "steps": [
+      "Cook brown rice according to package directions (or use pre-cooked).",
+      "Heat sesame oil in a wok or large pan over high heat.",
+      "Add turkey slices and stir-fry for 3-4 minutes until browned.",
+      "Add garlic and ginger, cook for 30 seconds.",
+      "Add mixed vegetables and stir-fry for 3-4 minutes until crisp-tender.",
+      "Pour in soy sauce and cornstarch mixture.",
+      "Stir until sauce thickens and coats everything evenly.",
+      "Serve over brown rice."
+    ],
+    "nutrition": {
+      "calories": 460,
+      "protein": 36,
+      "carbs": 45,
+      "fat": 14
+    },
+    "prepTime": "20 min",
+    "thumbnail": "turkey_stirfry_rice"
+  },
+  {
+    "id": "dinner-003",
+    "title": "Lentil & Vegetable Curry",
+    "category": "Dinner",
+    "description": "A warming plant-based curry rich in protein and fibre — comforting and perfect for your last meal of the day.",
+    "ingredients": [
+      "1 cup red lentils, rinsed",
+      "1 can (400ml) coconut milk",
+      "1 cup vegetable broth",
+      "1 onion, diced",
+      "2 cloves garlic, minced",
+      "1 tbsp curry powder",
+      "1 tsp turmeric",
+      "1 cup spinach",
+      "1 tbsp olive oil",
+      "Salt to taste"
+    ],
+    "steps": [
+      "Heat olive oil in a large pot over medium heat.",
+      "Sauté onion for 3-4 minutes until softened.",
+      "Add garlic, curry powder, and turmeric. Cook for 1 minute until fragrant.",
+      "Add lentils, coconut milk, and vegetable broth.",
+      "Bring to a boil, then reduce heat and simmer for 20 minutes until lentils are tender.",
+      "Stir in spinach and cook for 2 minutes until wilted.",
+      "Season with salt to taste.",
+      "Serve over rice or with naan bread."
+    ],
+    "nutrition": {
+      "calories": 520,
+      "protein": 22,
+      "carbs": 55,
+      "fat": 24
+    },
+    "prepTime": "30 min",
+    "thumbnail": "lentil_vegetable_curry"
+  },
+  {
+    "id": "snacks-001",
+    "title": "Almond Energy Bites",
+    "category": "Snacks",
+    "description": "No-bake energy bites made with almonds, oats, and honey — a quick snack to fuel your eating window.",
+    "ingredients": [
+      "1 cup rolled oats",
+      "1/2 cup almond butter",
+      "1/3 cup honey",
+      "1/4 cup dark chocolate chips",
+      "2 tbsp ground flaxseed",
+      "1 tsp vanilla extract",
+      "Pinch of salt"
+    ],
+    "steps": [
+      "Combine all ingredients in a large bowl and mix well.",
+      "Refrigerate the mixture for 15-20 minutes until firm enough to handle.",
+      "Roll into small balls (about 1 tablespoon each).",
+      "Place on a lined tray or plate.",
+      "Refrigerate for at least 30 minutes before serving.",
+      "Store in an airtight container in the fridge for up to one week."
+    ],
+    "nutrition": {
+      "calories": 95,
+      "protein": 3,
+      "carbs": 12,
+      "fat": 5
+    },
+    "prepTime": "15 min",
+    "thumbnail": "almond_energy_bites"
+  },
+  {
+    "id": "snacks-002",
+    "title": "Hummus & Veggie Sticks",
+    "category": "Snacks",
+    "description": "Classic hummus paired with fresh vegetable sticks — a satisfying, nutrient-rich snack.",
+    "ingredients": [
+      "1 can (400g) chickpeas, drained",
+      "2 tbsp tahini",
+      "2 tbsp lemon juice",
+      "1 clove garlic",
+      "2 tbsp olive oil",
+      "Salt to taste",
+      "Carrot sticks, cucumber sticks, bell pepper strips for dipping"
+    ],
+    "steps": [
+      "Add chickpeas, tahini, lemon juice, garlic, and olive oil to a food processor.",
+      "Blend until smooth, scraping down sides as needed.",
+      "Add 1-2 tablespoons of water if too thick.",
+      "Season with salt and blend again briefly.",
+      "Transfer to a serving bowl and drizzle with extra olive oil.",
+      "Serve with fresh vegetable sticks for dipping."
+    ],
+    "nutrition": {
+      "calories": 220,
+      "protein": 8,
+      "carbs": 22,
+      "fat": 12
+    },
+    "prepTime": "10 min",
+    "thumbnail": "hummus_veggie_sticks"
+  },
+  {
+    "id": "snacks-003",
+    "title": "Mixed Nuts & Dark Chocolate",
+    "category": "Snacks",
+    "description": "A simple combination of mixed nuts and dark chocolate — healthy fats and antioxidants in a handful.",
+    "ingredients": [
+      "30g almonds",
+      "20g walnuts",
+      "15g cashews",
+      "20g dark chocolate (70%+ cocoa), broken into pieces",
+      "1 tbsp dried cranberries (optional)"
+    ],
+    "steps": [
+      "Measure out each type of nut.",
+      "Break dark chocolate into small pieces.",
+      "Combine nuts, chocolate, and dried cranberries in a small bowl or container.",
+      "Mix gently.",
+      "Portion into small containers for grab-and-go snacking.",
+      "Store in a cool, dry place."
+    ],
+    "nutrition": {
+      "calories": 280,
+      "protein": 8,
+      "carbs": 16,
+      "fat": 22
+    },
+    "prepTime": "2 min",
+    "thumbnail": "mixed_nuts_chocolate"
+  },
+  {
+    "id": "smoothies-001",
+    "title": "Green Power Smoothie",
+    "category": "Smoothies",
+    "description": "A nutrient-packed green smoothie to gently break your fast with vitamins and minerals.",
+    "ingredients": [
+      "1 cup fresh spinach",
+      "1 banana (frozen for thickness)",
+      "1/2 cup mango chunks (frozen)",
+      "1 cup unsweetened almond milk",
+      "1 tbsp chia seeds",
+      "1/2 tsp fresh ginger (optional)"
+    ],
+    "steps": [
+      "Add almond milk to the blender first.",
+      "Add spinach and blend briefly until broken down.",
+      "Add frozen banana, mango chunks, chia seeds, and ginger.",
+      "Blend on high for 60-90 seconds until smooth.",
+      "Pour into a glass.",
+      "Serve immediately for best taste and nutrition."
+    ],
+    "nutrition": {
+      "calories": 250,
+      "protein": 6,
+      "carbs": 45,
+      "fat": 7
+    },
+    "prepTime": "5 min",
+    "thumbnail": "green_power_smoothie"
+  },
+  {
+    "id": "smoothies-002",
+    "title": "Berry Protein Smoothie",
+    "category": "Smoothies",
+    "description": "A protein-rich berry smoothie perfect for post-fast recovery and muscle support.",
+    "ingredients": [
+      "1 cup mixed berries (strawberries, blueberries, raspberries)",
+      "1 scoop protein powder (vanilla or unflavoured)",
+      "1 cup Greek yogurt",
+      "1/2 cup water or milk of choice",
+      "1 tbsp flaxseed",
+      "Ice cubes (optional)"
+    ],
+    "steps": [
+      "Add liquid to the blender first.",
+      "Add Greek yogurt and protein powder.",
+      "Add mixed berries and flaxseed.",
+      "Add ice cubes if desired for a thicker consistency.",
+      "Blend on high for 45-60 seconds until smooth and creamy.",
+      "Pour into a glass and enjoy immediately."
+    ],
+    "nutrition": {
+      "calories": 320,
+      "protein": 35,
+      "carbs": 30,
+      "fat": 8
+    },
+    "prepTime": "5 min",
+    "thumbnail": "berry_protein_smoothie"
+  },
+  {
+    "id": "smoothies-003",
+    "title": "Tropical Coconut Smoothie",
+    "category": "Smoothies",
+    "description": "A refreshing tropical smoothie with coconut and pineapple — hydrating and energising for your eating window.",
+    "ingredients": [
+      "1/2 cup pineapple chunks (frozen)",
+      "1/2 banana",
+      "1/2 cup coconut milk",
+      "1/2 cup coconut water",
+      "1 tbsp shredded coconut",
+      "1 tbsp hemp seeds"
+    ],
+    "steps": [
+      "Add coconut milk and coconut water to the blender.",
+      "Add frozen pineapple and banana.",
+      "Add hemp seeds.",
+      "Blend on high for 60 seconds until smooth.",
+      "Pour into a glass.",
+      "Top with shredded coconut and serve."
+    ],
+    "nutrition": {
+      "calories": 280,
+      "protein": 6,
+      "carbs": 35,
+      "fat": 14
+    },
+    "prepTime": "5 min",
+    "thumbnail": "tropical_coconut_smoothie"
+  }
+]
