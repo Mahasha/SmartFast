@@ -29,6 +29,10 @@ import { STORAGE_KEYS } from '../../utils/constants';
 import { UserProfile, SubscriptionTier } from '../../models/index';
 import { PRO_FEATURES, PRO_PLANS, FREE_PLANS } from '../../models/plans';
 
+// This suite validates the free/Pro gating that returns when real billing ships.
+// The v1 launch flag (which unlocks everything) is covered in launchUnlock.test.ts.
+jest.mock('../../utils/featureFlags', () => ({ PRO_UNLOCKED_FOR_LAUNCH: false }));
+
 // Mock Supabase client
 jest.mock('../../data/supabaseClient', () => ({
   supabase: {

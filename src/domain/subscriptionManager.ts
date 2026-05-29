@@ -18,6 +18,7 @@ import {
 import { ProFeature, PRO_FEATURES, ALL_PREDEFINED_PLANS, FREE_PLANS } from '../models/plans';
 import { getItem, setItem } from '../data/localStorage';
 import { STORAGE_KEYS } from '../utils/constants';
+import { PRO_UNLOCKED_FOR_LAUNCH } from '../utils/featureFlags';
 import { getDefaultFreePlan } from './planSelector';
 import { saveProfile } from './profileManager';
 
@@ -162,6 +163,7 @@ export function isProFeature(featureId: ProFeature): boolean {
  * Validates: Requirements 21.4 (treats pro and pro_mock identically)
  */
 export function hasProAccess(tier: SubscriptionTier): boolean {
+  if (PRO_UNLOCKED_FOR_LAUNCH) return true;
   return tier === 'pro' || tier === 'pro_mock';
 }
 

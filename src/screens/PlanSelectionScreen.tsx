@@ -70,14 +70,6 @@ export function PlanSelectionScreen() {
 
   const handlePlanPress = useCallback(
     async (planDisplay: PlanDisplay) => {
-      if (planDisplay.isLocked) {
-        // Navigate to Paywall (within the Home stack) for locked Pro plans.
-        // Staying in-stack keeps the native back button working so the user
-        // can return to plan selection (Requirement 3.3, 3.5).
-        navigation.navigate('Paywall');
-        return;
-      }
-
       // Select the plan and navigate back (Requirement 3.6)
       try {
         await selectPlan(planDisplay.plan.planId);

@@ -1,6 +1,11 @@
 /**
  * PaywallScreen — Pro subscription upsell screen.
  *
+ * NOTE: Intentionally not registered in any navigator for the v1 launch. The
+ * app ships without real billing, so no priced purchase flow is reachable
+ * (see PRO_UNLOCKED_FOR_LAUNCH). Re-add it to the Home/Profile stacks and wire
+ * Google Play Billing into handleSubscribe when monetization returns.
+ *
  * Displays:
  * - Pricing: Monthly R39.99, Yearly R199.99 (~R16.67/month, ~58% savings)
  * - "Save 58%" badge on yearly option

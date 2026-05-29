@@ -3,7 +3,7 @@
  *
  * Displays: display name, email, selected plan, subscription status.
  * Allows editing display name (persists to AsyncStorage + Supabase).
- * Links to: Settings, Notification Settings, Paywall, Logout.
+ * Links to: Settings, Notification Settings, Logout.
  *
  * Validates: Requirements 19.1, 19.2
  */
@@ -245,21 +245,6 @@ export function ProfileScreen() {
           </Text>
           <Text style={[styles.chevron, { color: theme.colors.textSecondary }]}>›</Text>
         </TouchableOpacity>
-
-        {!hasProAccess(subscription?.tier ?? 'free') && (
-          <TouchableOpacity
-            style={styles.navRow}
-            onPress={() => navigation.navigate('Paywall')}
-            accessibilityLabel="Upgrade to Pro"
-            accessibilityRole="button"
-            accessibilityHint="View Pro subscription options"
-          >
-            <Text style={[styles.navText, { color: theme.colors.primary }]}>
-              Upgrade to Pro
-            </Text>
-            <Text style={[styles.chevron, { color: theme.colors.textSecondary }]}>›</Text>
-          </TouchableOpacity>
-        )}
       </View>
 
       {/* Logout */}

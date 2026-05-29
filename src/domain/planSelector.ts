@@ -11,6 +11,7 @@ import { FastingPlan, SubscriptionTier, UserProfile } from '../models/index';
 import { ALL_PREDEFINED_PLANS, FREE_PLANS } from '../models/plans';
 import { getItem } from '../data/localStorage';
 import { STORAGE_KEYS } from '../utils/constants';
+import { PRO_UNLOCKED_FOR_LAUNCH } from '../utils/featureFlags';
 import { saveProfile } from './profileManager';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -39,7 +40,10 @@ export async function getAvailablePlans(
   const profile = await getItem<UserProfile>(STORAGE_KEYS.PROFILE);
   const selectedPlanId = profile?.selectedPlanId ?? null;
 
-  const hasProAccess = subscriptionTier === 'pro' || subscriptionTier === 'pro_mock';
+  const hasProAccess =
+    PRO_UNLOCKED_FOR_LAUNCH ||
+    subscriptionTier === 'pro' ||
+    subscriptionTier === 'pro_mock';
 
   return ALL_PREDEFINED_PLANS.map((plan) => ({
     plan,
@@ -81,7 +85,10 @@ export async function createCustomPlan(
   fastingHours: number,
   subscriptionTier: SubscriptionTier,
 ): Promise<FastingPlan> {
-  const hasProAccess = subscriptionTier === 'pro' || subscriptionTier === 'pro_mock';
+  const hasProAccess =
+    PRO_UNLOCKED_FOR_LAUNCH ||
+    subscriptionTier === 'pro' ||
+    subscriptionTier === 'pro_mock';
 
   if (!hasProAccess) {
     throw new Error(

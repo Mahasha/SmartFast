@@ -5,7 +5,6 @@
  * - Profile (ProfileScreen) — User profile and settings overview
  * - Settings — App settings
  * - NotificationSettings — Notification preferences
- * - Paywall — Pro subscription options
  *
  * Implements Requirement 24 AC4: nested navigation within Profile tab.
  */
@@ -17,13 +16,11 @@ import { useTheme } from '../theme/ThemeContext';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { NotificationSettingsScreen } from '../screens/NotificationSettingsScreen';
-import { PaywallScreen } from '../screens/PaywallScreen';
 
 export type ProfileStackParamList = {
   Profile: undefined;
   Settings: undefined;
   NotificationSettings: undefined;
-  Paywall: undefined;
 };
 
 const Stack = createNativeStackNavigator<ProfileStackParamList>();
@@ -54,11 +51,6 @@ export function ProfileStack() {
         name="NotificationSettings"
         component={NotificationSettingsScreen}
         options={{ title: 'Notifications' }}
-      />
-      <Stack.Screen
-        name="Paywall"
-        component={PaywallScreen}
-        options={{ title: 'Go Pro' }}
       />
     </Stack.Navigator>
   );

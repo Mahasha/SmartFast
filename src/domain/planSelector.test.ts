@@ -16,6 +16,11 @@ import { FREE_PLANS, PRO_PLANS, ALL_PREDEFINED_PLANS } from '../models/plans';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { STORAGE_KEYS } from '../utils/constants';
 
+// These tests validate the underlying free/Pro plan gating, which returns when
+// real billing ships. The v1 launch flag (which unlocks everything) is covered
+// separately in launchUnlock.test.ts.
+jest.mock('../utils/featureFlags', () => ({ PRO_UNLOCKED_FOR_LAUNCH: false }));
+
 const mockProfile: UserProfile = {
   userId: 'user-1',
   displayName: 'Test User',
