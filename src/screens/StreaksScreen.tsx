@@ -1,9 +1,14 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { useTheme } from '../theme/ThemeContext';
 import { FastingSession, FastingPlan } from '../models/index';
+import { ALL_PREDEFINED_PLANS } from '../models/plans';
 import { recomputeStreaks, isQualifyingFast } from '../domain/streakEngine';
+import { getSubscriptionStatus, hasProAccess } from '../domain/subscriptionManager';
+import { getItem } from '../data/localStorage';
+import { STORAGE_KEYS } from '../utils/constants';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -117,12 +122,34 @@ function toLocalDateFromUtc(utcIso: string): string {
  * Validates: Requirements 13.1, 13.2
  */
 export function StreaksScreen({
-  sessions = [],
-  plans = [],
-  isPro = false,
+  sessions: sessionsProp = [],
+  plans: plansProp = [],
+  isPro: isProProp = false,
 }: StreaksScreenProps) {
   const { theme } = useTheme();
   const now = useMemo(() => new Date(), []);
+
+  // When navigated to (no props), load real data from storage. Props remain
+  // supported so the component stays testable/renderable in isolation.
+  const [sessions, setSessions] = useState<FastingSession[]>(sessionsProp);
+  const [isPro, setIsPro] = useState<boolean>(isProProp);
+  const plans = plansProp.length > 0 ? plansProp : ALL_PREDEFINED_PLANS;
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      (async () => {
+        const history = await getItem<FastingSession[]>(STORAGE_KEYS.SESSION_HISTORY);
+        const status = await getSubscriptionStatus();
+        if (!active) return;
+        if (history) setSessions(history);
+        setIsPro(hasProAccess(status.tier));
+      })();
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
 
   // Compute streaks
   const streakResult = useMemo(

@@ -77,17 +77,55 @@ const MILESTONES: MilestoneDefinition[] = [
   },
   {
     name: '90%',
-    title: 'Almost Complete',
-    body: "You're 90% through your fast. The finish line is near!",
+    title: 'Almost There',
+    body: "You're 90% of the way to your goal. The finish line is near!",
     getTime: (startMs, _endMs, durationMs) => startMs + durationMs * 0.9,
   },
   {
-    name: 'Completed',
-    title: 'Fast Completed',
-    body: 'Congratulations! You have completed your fast.',
+    name: 'Goal Reached',
+    title: 'Goal Reached!',
+    body: "You've hit your fasting goal. Keep going for overtime, or end your fast whenever you're ready.",
     getTime: (_startMs, endMs) => endMs,
   },
 ];
+
+// ─── Overtime Reminders ──────────────────────────────────────────────────────
+
+/** Hours between overtime reminder notifications (counting past the goal). */
+export const OVERTIME_REMINDER_INTERVAL_HOURS = 1;
+
+/**
+ * How far past the goal we schedule overtime reminders in a single batch.
+ * expo-notifications can't schedule an unbounded series, so we cap the window
+ * and re-extend it on every app launch via revalidateOnLaunch.
+ */
+export const OVERTIME_REMINDER_CAP_HOURS = 12;
+
+/**
+ * Builds the bounded set of overtime reminder marks for a session: one per
+ * interval from (goal + interval) up to (goal + cap). Each mark's total fasted
+ * hour count is goalHours + N. Past marks are filtered by the scheduler.
+ */
+function buildOvertimeMilestones(startMs: number, endMs: number): MilestoneDefinition[] {
+  const goalHours = Math.round((endMs - startMs) / (60 * 60 * 1000));
+  const marks: MilestoneDefinition[] = [];
+
+  for (
+    let n = OVERTIME_REMINDER_INTERVAL_HOURS;
+    n <= OVERTIME_REMINDER_CAP_HOURS;
+    n += OVERTIME_REMINDER_INTERVAL_HOURS
+  ) {
+    const totalHours = goalHours + n;
+    marks.push({
+      name: `Overtime +${n}h`,
+      title: `${totalHours} hours fasted`,
+      body: `You're now fasting for ${totalHours} hours — great discipline!`,
+      getTime: (s, e) => e + n * 60 * 60 * 1000,
+    });
+  }
+
+  return marks;
+}
 
 // ─── Core Functions ──────────────────────────────────────────────────────────
 
@@ -105,7 +143,10 @@ export async function scheduleFastingMilestones(
 
   const scheduled: ScheduledNotification[] = [];
 
-  for (const milestone of MILESTONES) {
+  // Pre-goal/at-goal milestones, then bounded overtime reminders past the goal.
+  const allMilestones = [...MILESTONES, ...buildOvertimeMilestones(startMs, endMs)];
+
+  for (const milestone of allMilestones) {
     // Check condition (e.g., 12h milestone only for plans >= 12h)
     if (milestone.condition && !milestone.condition(durationMs)) {
       continue;
@@ -161,6 +202,16 @@ export async function cancelSessionNotifications(sessionId: string): Promise<voi
 
   delete map[sessionId];
   await saveScheduledNotificationsMap(map);
+}
+
+/**
+ * Cancels every scheduled notification and clears the tracking map.
+ * Used on logout so a previous user's reminders never fire for the next
+ * person on the device.
+ */
+export async function cancelAllNotifications(): Promise<void> {
+  await Notifications.cancelAllScheduledNotificationsAsync();
+  await saveScheduledNotificationsMap({});
 }
 
 /**

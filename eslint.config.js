@@ -34,4 +34,13 @@ module.exports = [
       '@typescript-eslint/no-explicit-any': 'warn',
     },
   },
+  {
+    // Tests legitimately use require() for module isolation/re-import and
+    // @ts-ignore to exercise invalid-input paths.
+    files: ['**/*.test.ts', '**/*.test.tsx', '**/__tests__/**'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+      '@typescript-eslint/ban-ts-comment': 'off',
+    },
+  },
 ];

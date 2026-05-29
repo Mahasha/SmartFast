@@ -1,7 +1,8 @@
 /**
  * Unit tests for useSessionRecovery hook and recoverSession utility
  *
- * Validates: Requirements 6.1, 6.2, 6.3, 6.4
+ * Open-ended fasting model: a session that runs past its planned goal stays
+ * ACTIVE and counts up in overtime. recoverSession never auto-completes.
  */
 
 import { recoverSession } from './useSessionRecovery';
@@ -23,7 +24,7 @@ describe('recoverSession', () => {
     expect(result.justCompleted).toBe(false);
   });
 
-  it('recalculates progress from system clock for an active session (Requirement 6.2, 6.4)', async () => {
+  it('recalculates progress from system clock for an active session', async () => {
     const now = new Date();
     const startTime = new Date(now.getTime() - 4 * 60 * 60 * 1000); // 4 hours ago
     const endTime = new Date(now.getTime() + 12 * 60 * 60 * 1000); // 12 hours from now
@@ -37,6 +38,8 @@ describe('recoverSession', () => {
       actualEndTime: null,
       status: 'ACTIVE',
       durationFasted: null,
+      goalReachedAt: null,
+      completedAt: null,
       timezoneOffsetMinutes: 0,
       createdAt: startTime.toISOString(),
       updatedAt: startTime.toISOString(),
@@ -52,17 +55,19 @@ describe('recoverSession', () => {
     expect(result.session).not.toBeNull();
     expect(result.session!.status).toBe('ACTIVE');
     expect(result.timerState).not.toBeNull();
-    expect(result.timerState!.isComplete).toBe(false);
-    expect(result.timerState!.elapsedMs).toBeGreaterThan(0);
+    expect(result.timerState!.isGoalReached).toBe(false);
+    expect(result.timerState!.phase).toBe('COUNTDOWN');
+    expect(result.timerState!.totalElapsedMs).toBeGreaterThan(0);
     expect(result.timerState!.remainingMs).toBeGreaterThan(0);
     expect(result.justCompleted).toBe(false);
   });
 
-  it('completes session that expired while in background (Requirement 6.3)', async () => {
-    const pastStart = new Date('2024-01-01T00:00:00.000Z');
-    const pastEnd = new Date('2024-01-01T16:00:00.000Z');
+  it('keeps a goal-passed session ACTIVE in overtime instead of auto-completing', async () => {
+    const now = new Date();
+    const pastStart = new Date(now.getTime() - 17 * 60 * 60 * 1000); // 17 hours ago
+    const pastEnd = new Date(now.getTime() - 1 * 60 * 60 * 1000); // goal hit 1 hour ago
 
-    const expiredSession: FastingSession = {
+    const overtimeSession: FastingSession = {
       sessionId: 'recovery-test-2',
       userId: 'guest',
       planId: 'plan-16-8',
@@ -71,6 +76,8 @@ describe('recoverSession', () => {
       actualEndTime: null,
       status: 'ACTIVE',
       durationFasted: null,
+      goalReachedAt: null,
+      completedAt: null,
       timezoneOffsetMinutes: 0,
       createdAt: pastStart.toISOString(),
       updatedAt: pastStart.toISOString(),
@@ -78,24 +85,27 @@ describe('recoverSession', () => {
 
     await AsyncStorage.setItem(
       STORAGE_KEYS.ACTIVE_SESSION,
-      JSON.stringify(expiredSession),
+      JSON.stringify(overtimeSession),
     );
 
     const result = await recoverSession();
 
     expect(result.session).not.toBeNull();
-    expect(result.session!.status).toBe('COMPLETED');
-    expect(result.session!.durationFasted).toBe(16 * 60 * 60);
+    expect(result.session!.status).toBe('ACTIVE');
+    expect(result.session!.durationFasted).toBeNull();
     expect(result.timerState).not.toBeNull();
-    expect(result.timerState!.isComplete).toBe(true);
-    expect(result.justCompleted).toBe(true);
+    expect(result.timerState!.isGoalReached).toBe(true);
+    expect(result.timerState!.phase).toBe('OVERTIME');
+    expect(result.timerState!.overtimeMs).toBeGreaterThan(0);
+    expect(result.justCompleted).toBe(false);
   });
 
-  it('clears active session key after completing expired session', async () => {
-    const pastStart = new Date('2024-01-01T00:00:00.000Z');
-    const pastEnd = new Date('2024-01-01T16:00:00.000Z');
+  it('does not clear the active session key for a goal-passed session', async () => {
+    const now = new Date();
+    const pastStart = new Date(now.getTime() - 17 * 60 * 60 * 1000);
+    const pastEnd = new Date(now.getTime() - 1 * 60 * 60 * 1000);
 
-    const expiredSession: FastingSession = {
+    const overtimeSession: FastingSession = {
       sessionId: 'recovery-test-3',
       userId: 'guest',
       planId: 'plan-16-8',
@@ -104,6 +114,8 @@ describe('recoverSession', () => {
       actualEndTime: null,
       status: 'ACTIVE',
       durationFasted: null,
+      goalReachedAt: null,
+      completedAt: null,
       timezoneOffsetMinutes: 0,
       createdAt: pastStart.toISOString(),
       updatedAt: pastStart.toISOString(),
@@ -111,13 +123,13 @@ describe('recoverSession', () => {
 
     await AsyncStorage.setItem(
       STORAGE_KEYS.ACTIVE_SESSION,
-      JSON.stringify(expiredSession),
+      JSON.stringify(overtimeSession),
     );
 
     await recoverSession();
 
     const raw = await AsyncStorage.getItem(STORAGE_KEYS.ACTIVE_SESSION);
-    expect(raw).toBeNull();
+    expect(raw).not.toBeNull();
   });
 
   it('invokes onRecovery callback with session state', async () => {
@@ -134,6 +146,8 @@ describe('recoverSession', () => {
       actualEndTime: null,
       status: 'ACTIVE',
       durationFasted: null,
+      goalReachedAt: null,
+      completedAt: null,
       timezoneOffsetMinutes: 0,
       createdAt: startTime.toISOString(),
       updatedAt: startTime.toISOString(),
@@ -151,7 +165,7 @@ describe('recoverSession', () => {
     expect(onRecovery).toHaveBeenCalledWith(
       expect.objectContaining({
         session: expect.objectContaining({ sessionId: 'recovery-test-4' }),
-        timerState: expect.objectContaining({ isComplete: false }),
+        timerState: expect.objectContaining({ isGoalReached: false }),
         justCompleted: false,
       }),
     );

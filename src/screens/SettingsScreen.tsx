@@ -21,9 +21,10 @@ import {
 import { useTheme } from '../theme/ThemeContext';
 import { ThemePreference } from '../theme/tokens';
 import { UserProfile } from '../models/index';
-import { getItem, setItem } from '../data/localStorage';
+import { getItem } from '../data/localStorage';
 import { STORAGE_KEYS } from '../utils/constants';
 import { logout } from '../domain/authManager';
+import { saveProfile } from '../domain/profileManager';
 import { deleteAccount } from '../utils/errorHandling';
 import {
   getSubscriptionStatus,
@@ -40,19 +41,23 @@ export function SettingsScreen() {
   const [devTapCount, setDevTapCount] = useState(0);
   const [showDevMenu, setShowDevMenu] = useState(false);
   const [subscriptionTier, setSubscriptionTier] = useState<string>('free');
+  const [billingPeriod, setBillingPeriod] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadSettings();
-  }, []);
-
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     const profile = await getItem<UserProfile>(STORAGE_KEYS.PROFILE);
     if (profile) {
       setUnitPref(profile.unitPreference);
     }
     const sub = await getSubscriptionStatus();
     setSubscriptionTier(sub.tier);
-  };
+    setBillingPeriod(sub.billingPeriod);
+  }, []);
+
+  useEffect(() => {
+    void (async () => {
+      await loadSettings();
+    })();
+  }, [loadSettings]);
 
   const handleThemeChange = useCallback(
     (newPref: ThemePreference) => {
@@ -70,7 +75,7 @@ export function SettingsScreen() {
         unitPreference: unit,
         updatedAt: new Date().toISOString(),
       };
-      await setItem(STORAGE_KEYS.PROFILE, updated);
+      await saveProfile(updated);
     }
   }, []);
 
@@ -117,6 +122,7 @@ export function SettingsScreen() {
     const newTier = hasProAccess(subscriptionTier as any) ? 'free' : 'pro_mock';
     await setMockStatus(newTier as any);
     setSubscriptionTier(newTier);
+    setBillingPeriod(newTier === 'free' ? null : 'monthly');
 
     if (newTier === 'free') {
       // Handle downgrade — revert Pro plans to free
@@ -258,7 +264,10 @@ export function SettingsScreen() {
               accessibilityRole="button"
             >
               <Text style={[styles.optionText, { color: theme.colors.text }]}>
-                Subscription: {hasProAccess(subscriptionTier as any) ? 'PRO (Mock)' : 'FREE'}
+                Subscription:{' '}
+                {hasProAccess(subscriptionTier as any)
+                  ? `PRO (Mock)${billingPeriod ? ` · ${billingPeriod === 'annual' ? 'Annual' : 'Monthly'}` : ''}`
+                  : 'FREE'}
               </Text>
               <Text style={[styles.toggleHint, { color: theme.colors.primary }]}>
                 Toggle

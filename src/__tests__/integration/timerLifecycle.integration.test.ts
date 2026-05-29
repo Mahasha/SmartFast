@@ -8,7 +8,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { startFast, getActiveSession, restoreSession, computeProgress, completeSession } from '../../domain/fastingTimer';
+import { startFast, getActiveSession, restoreSession, computeProgress, endFast } from '../../domain/fastingTimer';
 import { recomputeStreaks, isQualifyingFast } from '../../domain/streakEngine';
 import { enqueue, getSyncQueueSize } from '../../data/syncEngine';
 import { getItem, setItem } from '../../data/localStorage';
@@ -54,6 +54,7 @@ describe('Timer Lifecycle Integration', () => {
   });
 
   describe('Start → Persist → Restore → Complete flow', () => {
+
     it('should start a fast, persist it, and retrieve it as active', async () => {
       const session = await startFast(plan16_8);
 
@@ -79,14 +80,14 @@ describe('Timer Lifecycle Integration', () => {
       expect(restored!.status).toBe('ACTIVE');
     });
 
-    it('should auto-complete a session when restored after endTime has passed', async () => {
-      // Create a session that has already expired
+    it('should keep a session ACTIVE in overtime when restored after the goal passed', async () => {
+      // Create a session whose planned goal is already behind us
       const now = new Date();
       const pastStart = new Date(now.getTime() - 13 * 60 * 60 * 1000); // 13 hours ago
-      const pastEnd = new Date(now.getTime() - 1 * 60 * 60 * 1000); // 1 hour ago
+      const pastEnd = new Date(now.getTime() - 1 * 60 * 60 * 1000); // goal hit 1 hour ago
 
-      const expiredSession: FastingSession = {
-        sessionId: 'test-session-expired',
+      const overtimeSession: FastingSession = {
+        sessionId: 'test-session-overtime',
         userId: 'guest',
         planId: plan16_8.planId,
         startTime: pastStart.toISOString(),
@@ -94,19 +95,63 @@ describe('Timer Lifecycle Integration', () => {
         actualEndTime: null,
         status: 'ACTIVE',
         durationFasted: null,
+        goalReachedAt: null,
+        completedAt: null,
         timezoneOffsetMinutes: now.getTimezoneOffset(),
         createdAt: pastStart.toISOString(),
         updatedAt: pastStart.toISOString(),
       };
 
-      await setItem(STORAGE_KEYS.ACTIVE_SESSION, expiredSession);
+      await setItem(STORAGE_KEYS.ACTIVE_SESSION, overtimeSession);
 
-      // Restore should auto-complete
+      // Restore must NOT auto-complete — the fast keeps counting up.
       const restored = await restoreSession();
 
       expect(restored).not.toBeNull();
-      expect(restored!.status).toBe('COMPLETED');
-      expect(restored!.durationFasted).toBeGreaterThan(0);
+      expect(restored!.status).toBe('ACTIVE');
+      expect(restored!.durationFasted).toBeNull();
+
+      // The active session key must still be present after restore.
+      const stillActive = await getActiveSession();
+      expect(stillActive).not.toBeNull();
+      expect(stillActive!.sessionId).toBe('test-session-overtime');
+    });
+
+    it('should complete a goal-passed session only when the user ends it, recording actual duration', async () => {
+      const now = new Date();
+      const pastStart = new Date(now.getTime() - 13 * 60 * 60 * 1000); // 13 hours ago
+      const pastEnd = new Date(now.getTime() - 1 * 60 * 60 * 1000); // goal hit 1 hour ago
+
+      const overtimeSession: FastingSession = {
+        sessionId: 'test-session-end',
+        userId: 'guest',
+        planId: plan16_8.planId,
+        startTime: pastStart.toISOString(),
+        endTime: pastEnd.toISOString(),
+        actualEndTime: null,
+        status: 'ACTIVE',
+        durationFasted: null,
+        goalReachedAt: null,
+        completedAt: null,
+        timezoneOffsetMinutes: now.getTimezoneOffset(),
+        createdAt: pastStart.toISOString(),
+        updatedAt: pastStart.toISOString(),
+      };
+
+      await setItem(STORAGE_KEYS.ACTIVE_SESSION, overtimeSession);
+
+      const ended = await endFast();
+
+      expect(ended.status).toBe('COMPLETED');
+      // Actual fasted duration (~13h) exceeds the planned 12h goal.
+      expect(ended.durationFasted).toBeGreaterThan(12 * 60 * 60);
+      expect(ended.actualEndTime).not.toBeNull();
+      expect(ended.completedAt).not.toBeNull();
+      expect(ended.goalReachedAt).toBe(overtimeSession.endTime);
+
+      // Active session key is cleared after ending.
+      const active = await getActiveSession();
+      expect(active).toBeNull();
     });
 
     it('should compute progress correctly for an active session', async () => {
@@ -119,13 +164,15 @@ describe('Timer Lifecycle Integration', () => {
 
       const progress = computeProgress(session, sixHoursLater);
 
-      expect(progress.progressFraction).toBeCloseTo(0.5, 1);
-      expect(progress.isComplete).toBe(false);
+      expect(progress.progressPercent).toBeCloseTo(50, 0);
+      expect(progress.isGoalReached).toBe(false);
+      expect(progress.phase).toBe('COUNTDOWN');
       expect(progress.remainingMs).toBeGreaterThan(0);
-      expect(progress.elapsedMs).toBeGreaterThan(0);
+      expect(progress.totalElapsedMs).toBeGreaterThan(0);
+      expect(progress.overtimeMs).toBe(0);
     });
 
-    it('should mark session as complete when progress reaches 100%', async () => {
+    it('should enter overtime and cap progress at 100% once the goal is passed', async () => {
       const session = await startFast(plan16_8);
 
       // Simulate time past endTime
@@ -135,9 +182,10 @@ describe('Timer Lifecycle Integration', () => {
 
       const progress = computeProgress(session, pastEnd);
 
-      expect(progress.progressFraction).toBe(1);
-      expect(progress.isComplete).toBe(true);
+      expect(progress.progressPercent).toBe(100);
+      expect(progress.isGoalReached).toBe(true);
       expect(progress.remainingMs).toBe(0);
+      expect(progress.overtimeMs).toBeGreaterThan(0);
     });
 
     it('should prevent starting a new fast while one is active', async () => {

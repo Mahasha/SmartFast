@@ -55,3 +55,19 @@ const mockAsyncStorage = {
 };
 
 jest.mock('@react-native-async-storage/async-storage', () => mockAsyncStorage);
+
+// Default mock for expo-notifications so suites that only transitively import
+// it (e.g. via authManager → notificationScheduler) don't pull Expo's
+// strict-mode TS source into ts-jest. Suites that assert on scheduling
+// override this with their own jest.mock('expo-notifications', ...).
+jest.mock('expo-notifications', () => ({
+  cancelAllScheduledNotificationsAsync: jest.fn(() => Promise.resolve()),
+  cancelScheduledNotificationAsync: jest.fn(() => Promise.resolve()),
+  scheduleNotificationAsync: jest.fn(() => Promise.resolve('mock-notification-id')),
+  getAllScheduledNotificationsAsync: jest.fn(() => Promise.resolve([])),
+  requestPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted' })),
+  getPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted' })),
+  setNotificationHandler: jest.fn(),
+  AndroidImportance: { DEFAULT: 3, HIGH: 4 },
+  SchedulableTriggerInputTypes: { DATE: 'date', TIME_INTERVAL: 'timeInterval' },
+}));

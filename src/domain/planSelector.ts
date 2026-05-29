@@ -9,8 +9,9 @@
 import { v4 as uuidv4 } from 'uuid';
 import { FastingPlan, SubscriptionTier, UserProfile } from '../models/index';
 import { ALL_PREDEFINED_PLANS, FREE_PLANS } from '../models/plans';
-import { getItem, setItem } from '../data/localStorage';
+import { getItem } from '../data/localStorage';
 import { STORAGE_KEYS } from '../utils/constants';
+import { saveProfile } from './profileManager';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -64,7 +65,7 @@ export async function selectPlan(planId: string): Promise<void> {
     updatedAt: new Date().toISOString(),
   };
 
-  await setItem(STORAGE_KEYS.PROFILE, updatedProfile);
+  await saveProfile(updatedProfile);
 }
 
 /**

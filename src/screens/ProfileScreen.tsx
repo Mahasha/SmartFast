@@ -8,7 +8,7 @@
  * Validates: Requirements 19.1, 19.2
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   Alert,
   ScrollView,
@@ -18,15 +18,16 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useTheme } from '../theme/ThemeContext';
 import { UserProfile, SubscriptionStatus } from '../models/index';
 import { ALL_PREDEFINED_PLANS } from '../models/plans';
-import { getItem, setItem } from '../data/localStorage';
+import { getItem } from '../data/localStorage';
 import { STORAGE_KEYS } from '../utils/constants';
 import { logout } from '../domain/authManager';
+import { saveProfile } from '../domain/profileManager';
 import { getSubscriptionStatus, hasProAccess } from '../domain/subscriptionManager';
 import { ProfileStackParamList } from '../navigation/ProfileStack';
 
@@ -41,11 +42,7 @@ export function ProfileScreen() {
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState('');
 
-  useEffect(() => {
-    loadProfileData();
-  }, []);
-
-  const loadProfileData = async () => {
+  const loadProfileData = useCallback(async () => {
     const storedProfile = await getItem<UserProfile>(STORAGE_KEYS.PROFILE);
     if (storedProfile) {
       setProfile(storedProfile);
@@ -53,7 +50,13 @@ export function ProfileScreen() {
     }
     const sub = await getSubscriptionStatus();
     setSubscription(sub);
-  };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadProfileData();
+    }, [loadProfileData]),
+  );
 
   const handleSaveDisplayName = useCallback(async () => {
     if (!profile) return;
@@ -67,7 +70,7 @@ export function ProfileScreen() {
       displayName: trimmed,
       updatedAt: new Date().toISOString(),
     };
-    await setItem(STORAGE_KEYS.PROFILE, updatedProfile);
+    await saveProfile(updatedProfile);
     setProfile(updatedProfile);
     setIsEditingName(false);
   }, [profile, editedName]);
@@ -243,18 +246,20 @@ export function ProfileScreen() {
           <Text style={[styles.chevron, { color: theme.colors.textSecondary }]}>›</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.navRow}
-          onPress={() => navigation.navigate('Paywall')}
-          accessibilityLabel="Upgrade to Pro"
-          accessibilityRole="button"
-          accessibilityHint="View Pro subscription options"
-        >
-          <Text style={[styles.navText, { color: theme.colors.primary }]}>
-            Upgrade to Pro
-          </Text>
-          <Text style={[styles.chevron, { color: theme.colors.textSecondary }]}>›</Text>
-        </TouchableOpacity>
+        {!hasProAccess(subscription?.tier ?? 'free') && (
+          <TouchableOpacity
+            style={styles.navRow}
+            onPress={() => navigation.navigate('Paywall')}
+            accessibilityLabel="Upgrade to Pro"
+            accessibilityRole="button"
+            accessibilityHint="View Pro subscription options"
+          >
+            <Text style={[styles.navText, { color: theme.colors.primary }]}>
+              Upgrade to Pro
+            </Text>
+            <Text style={[styles.chevron, { color: theme.colors.textSecondary }]}>›</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Logout */}

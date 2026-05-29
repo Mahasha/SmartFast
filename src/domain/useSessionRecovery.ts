@@ -10,14 +10,16 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
-import { FastingSession, TimerState } from '../models/index';
-import { getActiveSession, computeProgress, completeSession } from './fastingTimer';
-import { removeItem } from '../data/localStorage';
-import { STORAGE_KEYS } from '../utils/constants';
+import { FastingSession, FastingProgress } from '../models/index';
+import { getActiveSession, computeProgress } from './fastingTimer';
 
 export interface SessionRecoveryState {
   session: FastingSession | null;
-  timerState: TimerState | null;
+  timerState: FastingProgress | null;
+  /**
+   * Retained for callers' shape stability. Fasting is open-ended, so foreground
+   * recovery never auto-completes a session — this is always false.
+   */
   justCompleted: boolean;
 }
 
@@ -67,7 +69,9 @@ export function useSessionRecovery(options?: UseSessionRecoveryOptions): void {
  *
  * - Reads the active session from storage
  * - Recalculates progress from the system clock
- * - If the session is complete, marks it as COMPLETED and clears active session
+ * - Returns the active session for resumption. Fasting is open-ended, so a
+ *   session past its goal simply resumes in overtime — it is never
+ *   auto-completed here; only an explicit user action ends a fast.
  *
  * Validates: Requirements 6.2, 6.3, 6.4
  */
@@ -89,21 +93,7 @@ export async function recoverSession(
   const now = new Date();
   const timerState = computeProgress(session, now);
 
-  if (timerState.isComplete) {
-    // Session completed while in background
-    const completedSession = await completeSession(session);
-    await removeItem(STORAGE_KEYS.ACTIVE_SESSION);
-
-    const state: SessionRecoveryState = {
-      session: completedSession,
-      timerState,
-      justCompleted: true,
-    };
-    onRecovery?.(state);
-    return state;
-  }
-
-  // Session still active — return updated progress
+  // Session still active — resume (in overtime if past the goal).
   const state: SessionRecoveryState = {
     session,
     timerState,

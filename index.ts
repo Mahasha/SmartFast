@@ -1,3 +1,7 @@
+// Polyfill crypto.getRandomValues before any uuid import is evaluated —
+// React Native has no native crypto, so uuid throws without this.
+import 'react-native-get-random-values';
+
 import { registerRootComponent } from 'expo';
 
 import App from './App';

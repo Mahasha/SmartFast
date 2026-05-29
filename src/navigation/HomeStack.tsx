@@ -18,12 +18,14 @@ import { HomeScreen } from '../screens/HomeScreen';
 import { PlanSelectionScreen } from '../screens/PlanSelectionScreen';
 import { StreaksScreen } from '../screens/StreaksScreen';
 import { FastingHistoryScreen } from '../screens/FastingHistoryScreen';
+import { PaywallScreen } from '../screens/PaywallScreen';
 
 export type HomeStackParamList = {
   Dashboard: undefined;
   PlanSelection: undefined;
   Streaks: undefined;
   FastingHistory: undefined;
+  Paywall: undefined;
 };
 
 const Stack = createNativeStackNavigator<HomeStackParamList>();
@@ -59,6 +61,11 @@ export function HomeStack() {
         name="FastingHistory"
         component={FastingHistoryScreen}
         options={{ title: 'Fasting History' }}
+      />
+      <Stack.Screen
+        name="Paywall"
+        component={PaywallScreen}
+        options={{ title: 'Go Pro' }}
       />
     </Stack.Navigator>
   );

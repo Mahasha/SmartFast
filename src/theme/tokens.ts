@@ -22,6 +22,8 @@ export interface Theme {
     timerArc: string;
     /** Circular timer background track color */
     timerTrack: string;
+    /** Gold accent for the goal-reached / overtime state */
+    goalAccent: string;
     /** Deterministic pastel palette for content cards */
     cardPastel: string[];
     /** Error state color */
@@ -51,6 +53,7 @@ export const lightTheme: Theme = {
     textSecondary: '#6B7280',
     timerArc: '#2E7D32',
     timerTrack: '#E0E0E0',
+    goalAccent: '#C8A028', // gold
     cardPastel: [
       '#E8F5E9', // soft green
       '#E3F2FD', // soft blue
@@ -82,6 +85,7 @@ export const darkTheme: Theme = {
     textSecondary: '#9CA3AF',
     timerArc: '#66BB6A',
     timerTrack: '#333333',
+    goalAccent: '#FFD54F', // gold (lifted for dark backgrounds)
     cardPastel: [
       '#1B5E20', // muted green
       '#0D47A1', // muted blue
@@ -106,7 +110,6 @@ export const darkTheme: Theme = {
 export function stableHash(identifier: string): number {
   let hash = 5381;
   for (let i = 0; i < identifier.length; i++) {
-    // eslint-disable-next-line no-bitwise
     hash = (hash * 33) ^ identifier.charCodeAt(i);
   }
   // Ensure non-negative

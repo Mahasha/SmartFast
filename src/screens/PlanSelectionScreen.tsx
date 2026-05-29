@@ -20,21 +20,18 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { CompositeNavigationProp } from '@react-navigation/native';
-import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
 import { useTheme } from '../theme/ThemeContext';
 import { getCardColor } from '../theme/tokens';
 import { getAvailablePlans, selectPlan, PlanDisplay } from '../domain/planSelector';
 import { getSubscriptionStatus } from '../domain/subscriptionManager';
 import type { HomeStackParamList } from '../navigation/HomeStack';
-import type { BottomTabParamList } from '../navigation/AppNavigator';
 
 // ─── Navigation Types ────────────────────────────────────────────────────────
 
-type PlanSelectionNavigationProp = CompositeNavigationProp<
-  NativeStackNavigationProp<HomeStackParamList, 'PlanSelection'>,
-  BottomTabNavigationProp<BottomTabParamList>
+type PlanSelectionNavigationProp = NativeStackNavigationProp<
+  HomeStackParamList,
+  'PlanSelection'
 >;
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -74,8 +71,10 @@ export function PlanSelectionScreen() {
   const handlePlanPress = useCallback(
     async (planDisplay: PlanDisplay) => {
       if (planDisplay.isLocked) {
-        // Navigate to Paywall for locked Pro plans (Requirement 3.3, 3.5)
-        navigation.navigate('Profile', { screen: 'Paywall' });
+        // Navigate to Paywall (within the Home stack) for locked Pro plans.
+        // Staying in-stack keeps the native back button working so the user
+        // can return to plan selection (Requirement 3.3, 3.5).
+        navigation.navigate('Paywall');
         return;
       }
 

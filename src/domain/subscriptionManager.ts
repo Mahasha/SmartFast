@@ -9,11 +9,17 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import { SubscriptionStatus, SubscriptionTier, UserProfile } from '../models/index';
+import {
+  BillingPeriod,
+  SubscriptionStatus,
+  SubscriptionTier,
+  UserProfile,
+} from '../models/index';
 import { ProFeature, PRO_FEATURES, ALL_PREDEFINED_PLANS, FREE_PLANS } from '../models/plans';
 import { getItem, setItem } from '../data/localStorage';
 import { STORAGE_KEYS } from '../utils/constants';
 import { getDefaultFreePlan } from './planSelector';
+import { saveProfile } from './profileManager';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -26,6 +32,7 @@ function createDefaultSubscriptionStatus(): SubscriptionStatus {
     subId: uuidv4(),
     userId: 'guest',
     tier: 'free',
+    billingPeriod: null,
     expiryDate: null,
     trialStartDate: null,
     trialEndDate: null,
@@ -33,6 +40,90 @@ function createDefaultSubscriptionStatus(): SubscriptionStatus {
     createdAt: now,
     updatedAt: now,
   };
+}
+
+// ─── Test-User Seed ──────────────────────────────────────────────────────────
+
+/**
+ * Seed plans for known test accounts. Subscriptions are a local mock with no
+ * server backing, so logging into one of these accounts on a fresh install
+ * resolves to the assigned tier/period. Keyed by lower-cased email.
+ *
+ * Remove (or gate behind a dev flag) before real billing is wired up.
+ */
+const SUBSCRIPTION_SEED: Record<string, { tier: SubscriptionTier; billingPeriod: BillingPeriod }> = {
+  'mahasha.retshepile@gmail.com': { tier: 'pro_mock', billingPeriod: 'annual' },
+  'psp.mahasha@gmail.com': { tier: 'pro_mock', billingPeriod: 'monthly' },
+  'molozwi@gmail.com': { tier: 'free', billingPeriod: null },
+};
+
+// ─── Per-User Ledger ─────────────────────────────────────────────────────────
+
+type SubscriptionLedger = Record<string, SubscriptionStatus>;
+
+async function getLedger(): Promise<SubscriptionLedger> {
+  return (await getItem<SubscriptionLedger>(STORAGE_KEYS.SUBSCRIPTION_LEDGER)) ?? {};
+}
+
+async function saveToLedger(status: SubscriptionStatus): Promise<void> {
+  if (!status.userId || status.userId === 'guest') return;
+  const ledger = await getLedger();
+  ledger[status.userId] = status;
+  await setItem(STORAGE_KEYS.SUBSCRIPTION_LEDGER, ledger);
+}
+
+function expiryForPeriod(period: BillingPeriod, from: Date): string | null {
+  if (period === null) return null;
+  const expiry = new Date(from);
+  if (period === 'annual') {
+    expiry.setFullYear(expiry.getFullYear() + 1);
+  } else {
+    expiry.setMonth(expiry.getMonth() + 1);
+  }
+  return expiry.toISOString();
+}
+
+/**
+ * Resolves and activates the subscription for a signed-in user. Restores from
+ * the per-user ledger first; otherwise applies the test-user seed; otherwise
+ * defaults to free. Writes the result to the active SUBSCRIPTION_STATUS key
+ * (what the rest of the app reads) and back into the ledger.
+ *
+ * Called on login/register/restore so each account carries its own tier across
+ * logout/login even though clearing local data wipes the active key.
+ */
+export async function resolveSubscriptionForUser(
+  userId: string,
+  email: string,
+): Promise<SubscriptionStatus> {
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const ledger = await getLedger();
+
+  let status = ledger[userId];
+
+  if (!status) {
+    const seed = SUBSCRIPTION_SEED[email.toLowerCase()];
+    status = {
+      subId: uuidv4(),
+      userId,
+      tier: seed?.tier ?? 'free',
+      billingPeriod: seed?.billingPeriod ?? null,
+      expiryDate: seed ? expiryForPeriod(seed.billingPeriod, now) : null,
+      trialStartDate: null,
+      trialEndDate: null,
+      provider: 'local',
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+  } else {
+    // Keep the userId field aligned in case it was persisted under 'guest'.
+    status = { ...status, userId };
+  }
+
+  await setItem(STORAGE_KEYS.SUBSCRIPTION_STATUS, status);
+  await saveToLedger(status);
+  return status;
 }
 
 // ─── Subscription Manager Functions ──────────────────────────────────────────
@@ -80,29 +171,44 @@ export function hasProAccess(tier: SubscriptionTier): boolean {
  *
  * Validates: Requirement 21.4 (developer/tester setting to toggle)
  */
-export async function setMockStatus(tier: SubscriptionTier): Promise<void> {
+export async function setMockStatus(
+  tier: SubscriptionTier,
+  billingPeriod?: BillingPeriod,
+): Promise<void> {
   const existing = await getItem<SubscriptionStatus>(STORAGE_KEYS.SUBSCRIPTION_STATUS);
-  const now = new Date().toISOString();
+  const now = new Date();
+  const nowIso = now.toISOString();
+
+  // Free has no billing period. For Pro, use the explicit period, else keep the
+  // existing one, else default to monthly.
+  const resolvedPeriod: BillingPeriod =
+    tier === 'free'
+      ? null
+      : billingPeriod ?? existing?.billingPeriod ?? 'monthly';
 
   const updatedStatus: SubscriptionStatus = existing
     ? {
         ...existing,
         tier,
-        updatedAt: now,
+        billingPeriod: resolvedPeriod,
+        expiryDate: expiryForPeriod(resolvedPeriod, now),
+        updatedAt: nowIso,
       }
     : {
         subId: uuidv4(),
         userId: 'guest',
         tier,
-        expiryDate: null,
+        billingPeriod: resolvedPeriod,
+        expiryDate: expiryForPeriod(resolvedPeriod, now),
         trialStartDate: null,
         trialEndDate: null,
         provider: 'local',
-        createdAt: now,
-        updatedAt: now,
+        createdAt: nowIso,
+        updatedAt: nowIso,
       };
 
   await setItem(STORAGE_KEYS.SUBSCRIPTION_STATUS, updatedStatus);
+  await saveToLedger(updatedStatus);
 }
 
 /**
@@ -132,7 +238,7 @@ export async function handleProDowngrade(): Promise<void> {
       selectedPlanId: defaultPlan.planId,
       updatedAt: new Date().toISOString(),
     };
-    await setItem(STORAGE_KEYS.PROFILE, updatedProfile);
+    await saveProfile(updatedProfile);
     return;
   }
 
@@ -147,7 +253,7 @@ export async function handleProDowngrade(): Promise<void> {
         selectedPlanId: defaultPlan.planId,
         updatedAt: new Date().toISOString(),
       };
-      await setItem(STORAGE_KEYS.PROFILE, updatedProfile);
+      await saveProfile(updatedProfile);
     }
   }
 }

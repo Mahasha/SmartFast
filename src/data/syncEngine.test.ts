@@ -29,6 +29,8 @@ jest.mock('./supabaseClient', () => ({
 
 jest.mock('../domain/authManager', () => ({
   refreshToken: jest.fn(),
+  isAuthenticated: jest.fn(() => true),
+  getCurrentUserId: jest.fn(() => 'user-1'),
 }));
 
 jest.mock('../domain/streakEngine', () => ({
@@ -45,12 +47,14 @@ jest.mock('uuid', () => ({
 }));
 
 import { supabase } from './supabaseClient';
-import { refreshToken } from '../domain/authManager';
+import { refreshToken, isAuthenticated, getCurrentUserId } from '../domain/authManager';
 import { recomputeStreaks } from '../domain/streakEngine';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const mockSupabase = supabase as jest.Mocked<typeof supabase>;
 const mockRefreshToken = refreshToken as jest.MockedFunction<typeof refreshToken>;
+const mockIsAuthenticated = isAuthenticated as jest.MockedFunction<typeof isAuthenticated>;
+const mockGetCurrentUserId = getCurrentUserId as jest.MockedFunction<typeof getCurrentUserId>;
 const mockRecomputeStreaks = recomputeStreaks as jest.MockedFunction<typeof recomputeStreaks>;
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
@@ -93,6 +97,9 @@ function createDailyStats(overrides: Partial<DailyStats> = {}): DailyStats {
 beforeEach(() => {
   jest.clearAllMocks();
   (AsyncStorage.clear as jest.Mock)();
+  // Default to an authenticated user; individual tests override as needed.
+  mockIsAuthenticated.mockReturnValue(true);
+  mockGetCurrentUserId.mockReturnValue('user-1');
 });
 
 // ─── Queue Management Tests ──────────────────────────────────────────────────
@@ -293,6 +300,37 @@ describe('SyncEngine - pushPendingChanges', () => {
     const result = await pushPendingChanges();
     expect(result.pushed).toBe(0);
     expect(result.errors).toHaveLength(0);
+  });
+
+  test('stamps the authenticated userId onto pushed payloads (RLS)', async () => {
+    mockGetCurrentUserId.mockReturnValue('auth-uid-123');
+    const session = createSession({ userId: 'guest' });
+    await enqueue(session);
+
+    const mockUpsert = jest.fn().mockResolvedValue({ error: null });
+    (mockSupabase.from as jest.Mock).mockReturnValue({ upsert: mockUpsert });
+
+    await pushPendingChanges();
+
+    expect(mockUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'auth-uid-123' }),
+    );
+  });
+
+  test('does not push while in guest mode', async () => {
+    mockIsAuthenticated.mockReturnValue(false);
+    const session = createSession();
+    await enqueue(session);
+
+    const mockUpsert = jest.fn().mockResolvedValue({ error: null });
+    (mockSupabase.from as jest.Mock).mockReturnValue({ upsert: mockUpsert });
+
+    const result = await pushPendingChanges();
+
+    expect(mockUpsert).not.toHaveBeenCalled();
+    expect(result.pushed).toBe(0);
+    // Queue is preserved for a later authenticated push.
+    expect(await getSyncQueueSize()).toBe(1);
   });
 
   test('retains entries in queue on network error', async () => {

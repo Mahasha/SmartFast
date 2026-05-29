@@ -18,10 +18,12 @@ export interface FastingSession {
   userId: string;                   // Supabase Auth userId or "guest"
   planId: string;
   startTime: string;                // UTC ISO 8601
-  endTime: string;                  // UTC ISO 8601 (planned end)
-  actualEndTime: string | null;     // UTC ISO 8601 (set when ended early)
+  endTime: string;                  // UTC ISO 8601 (planned goal — fasting may continue past this)
+  actualEndTime: string | null;     // UTC ISO 8601 (set when the fast is ended/cancelled)
   status: SessionStatus;
-  durationFasted: number | null;    // seconds
+  durationFasted: number | null;    // seconds actually fasted (start → actualEndTime); the analytics source of truth
+  goalReachedAt?: string | null;    // UTC ISO 8601 — set to endTime when carried to/past goal; absent on legacy/pre-overtime sessions
+  completedAt?: string | null;      // UTC ISO 8601 — when the user explicitly ended the fast; absent on legacy sessions
   timezoneOffsetMinutes: number;    // audit only, not used in MVP calculations
   createdAt: string;                // UTC ISO 8601
   updatedAt: string;                // UTC ISO 8601
@@ -73,10 +75,14 @@ export interface StreakRecord {
 
 export type SubscriptionTier = 'free' | 'pro' | 'pro_mock';
 
+/** Billing cadence for a paid subscription. null for free tier. */
+export type BillingPeriod = 'monthly' | 'annual' | null;
+
 export interface SubscriptionStatus {
   subId: string;
   userId: string;
   tier: SubscriptionTier;
+  billingPeriod: BillingPeriod;
   expiryDate: string | null;
   trialStartDate: string | null;
   trialEndDate: string | null;
@@ -132,15 +138,32 @@ export interface SyncQueueEntry {
   retryCount: number;
 }
 
-// ─── Timer State ─────────────────────────────────────────────────────────────
+// ─── Timer / Fasting Progress ────────────────────────────────────────────────
 
-export interface TimerState {
-  remainingMs: number;
-  elapsedMs: number;
-  progressFraction: number;         // 0.0 to 1.0
+/**
+ * Lifecycle phase of a fasting session's timer:
+ * - COUNTDOWN:    before the planned goal (remaining time > 0)
+ * - GOAL_REACHED: the instant the goal is hit (brief celebration window)
+ * - OVERTIME:     fasting continued past the goal; counting up
+ * - COMPLETED:    a terminal session (not a live, ticking state)
+ */
+export type FastingPhase = 'COUNTDOWN' | 'GOAL_REACHED' | 'OVERTIME' | 'COMPLETED';
+
+/**
+ * Derived timer state for a fasting session. Computed purely from
+ * startTime/endTime and the current clock — never persisted per tick.
+ */
+export interface FastingProgress {
+  phase: FastingPhase;
+  isGoalReached: boolean;
+  remainingMs: number;              // time left until goal; 0 once reached
+  overtimeMs: number;               // time fasted past the goal; 0 before
+  totalElapsedMs: number;           // start → now (includes overtime)
+  plannedDurationMs: number;        // endTime − startTime
+  progressPercent: number;          // 0–100, capped at 100 (never exceeds the goal visually)
   remainingFormatted: string;       // HH:MM:SS
-  elapsedFormatted: string;         // HH:MM:SS
-  isComplete: boolean;
+  overtimeFormatted: string;        // HH:MM:SS
+  totalElapsedFormatted: string;    // HH:MM:SS
 }
 
 // ─── Clock Integrity ─────────────────────────────────────────────────────────

@@ -10,7 +10,7 @@ interface EnvConfig {
   supabaseAnonKey: string;
 }
 
-const extra = Constants.expirationDate ? undefined : Constants.expoConfig?.extra;
+const extra = Constants.expoConfig?.extra;
 
 export const ENV: EnvConfig = {
   supabaseUrl: (extra?.supabaseUrl as string) ?? process.env.EXPO_PUBLIC_SUPABASE_URL ?? '',

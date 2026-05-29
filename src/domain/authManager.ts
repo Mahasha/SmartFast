@@ -8,9 +8,84 @@
  * Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 32.1, 32.2, 32.3, 32.4, 32.5
  */
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { supabase } from '../data/supabaseClient';
 import { getItem, setItem, removeItem } from '../data/localStorage';
 import { STORAGE_KEYS } from '../utils/constants';
+import { UserProfile } from '../models/index';
+import { ALL_PREDEFINED_PLANS } from '../models/plans';
+import { cancelAllNotifications } from './notificationScheduler';
+import { resolveSubscriptionForUser } from './subscriptionManager';
+import { saveProfile, getLedgerProfile } from './profileManager';
+import { restoreActiveSessionFromLedger } from './activeSessionLedger';
+
+const DEFAULT_PLAN_ID = 'plan-16-8';
+
+// Device-level keys that are NOT tied to a specific user and must survive
+// logout. The subscription ledger is keyed by userId, so preserving it only
+// restores a tier when that same account signs back in.
+const PRESERVED_KEYS: string[] = [
+  STORAGE_KEYS.THEME_PREFERENCE,
+  STORAGE_KEYS.SUBSCRIPTION_LEDGER,
+  STORAGE_KEYS.PROFILE_LEDGER,
+  STORAGE_KEYS.ACTIVE_SESSION_LEDGER,
+];
+
+/**
+ * Wipes all locally-cached, user-scoped data (profile, sessions, stats, streak,
+ * sync queue, etc.) so it can't leak into the next session — e.g. a guest
+ * started right after logging out. Authenticated data is already synced to
+ * Supabase and re-pulls on next login. Device preferences are preserved.
+ */
+async function clearLocalUserData(): Promise<void> {
+  const allKeys = await AsyncStorage.getAllKeys();
+  const userKeys = allKeys.filter(
+    (key) => key.startsWith('@fasttrack:') && !PRESERVED_KEYS.includes(key),
+  );
+  if (userKeys.length > 0) {
+    await AsyncStorage.multiRemove(userKeys);
+  }
+}
+
+/**
+ * Ensures a complete UserProfile exists in local storage for the signed-in
+ * user. Creates one on first sign-in; otherwise backfills any missing fields
+ * (userId, email) and discards a stale/unknown selectedPlanId. Without this a
+ * freshly-registered account has no profile, so the Profile screen renders
+ * empty fields and the display-name save is a no-op.
+ *
+ * Falls back to the per-user ledger when the active PROFILE key is absent (e.g.
+ * after logout wiped it) so the saved display name and preferences are restored
+ * rather than reset to the email prefix.
+ */
+async function ensureUserProfile(userId: string, email: string): Promise<void> {
+  const existing =
+    (await getItem<Partial<UserProfile>>(STORAGE_KEYS.PROFILE)) ??
+    (await getLedgerProfile(userId));
+  const now = new Date().toISOString();
+
+  const displayName =
+    existing?.displayName?.trim() || email.split('@')[0] || 'FastTrack User';
+
+  const planIsKnown =
+    !!existing?.selectedPlanId &&
+    ALL_PREDEFINED_PLANS.some((p) => p.planId === existing.selectedPlanId);
+
+  const profile: UserProfile = {
+    userId,
+    email,
+    displayName,
+    selectedPlanId: planIsKnown ? existing!.selectedPlanId! : DEFAULT_PLAN_ID,
+    unitPreference: existing?.unitPreference ?? 'metric',
+    themePreference: existing?.themePreference ?? 'system',
+    onboardingCompleted: existing?.onboardingCompleted ?? false,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  };
+
+  await saveProfile(profile);
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -48,17 +123,18 @@ export type MigrationResult =
  * Returns true if the device can reach the network.
  */
 async function checkNetworkAvailable(): Promise<boolean> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
     await fetch('https://www.google.com/generate_204', {
       method: 'HEAD',
       signal: controller.signal,
     });
-    clearTimeout(timeoutId);
     return true;
   } catch {
     return false;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -66,6 +142,40 @@ async function checkNetworkAvailable(): Promise<boolean> {
 
 let _currentSession: AuthSession | null = null;
 let _isGuestMode = false;
+
+// ─── Auth State Observability ──────────────────────────────────────────────────
+
+export type AuthStatus = 'authenticated' | 'guest' | 'unauthenticated';
+
+const _listeners = new Set<() => void>();
+
+/**
+ * Subscribe to auth state changes. Returns an unsubscribe function.
+ * Designed for React's useSyncExternalStore so navigation re-renders
+ * when the user logs in, registers, starts guest mode, or logs out.
+ */
+export function subscribeAuthState(listener: () => void): () => void {
+  _listeners.add(listener);
+  return () => {
+    _listeners.delete(listener);
+  };
+}
+
+/**
+ * Current auth status snapshot. Must return a stable value so
+ * useSyncExternalStore can compare references between renders.
+ */
+export function getAuthStatus(): AuthStatus {
+  if (_currentSession !== null && !_isGuestMode) return 'authenticated';
+  if (_isGuestMode) return 'guest';
+  return 'unauthenticated';
+}
+
+function emitAuthChange(): void {
+  for (const listener of _listeners) {
+    listener();
+  }
+}
 
 // ─── AuthManager Implementation ──────────────────────────────────────────────
 
@@ -107,6 +217,10 @@ export async function register(email: string, password: string): Promise<AuthRes
     _currentSession = session;
     _isGuestMode = false;
     await removeItem(STORAGE_KEYS.GUEST_MODE);
+    await ensureUserProfile(session.userId, session.email);
+    await resolveSubscriptionForUser(session.userId, session.email);
+    await restoreActiveSessionFromLedger(session.userId);
+    emitAuthChange();
 
     return { success: true, session };
   } catch {
@@ -151,6 +265,10 @@ export async function login(email: string, password: string): Promise<AuthResult
     _currentSession = session;
     _isGuestMode = false;
     await removeItem(STORAGE_KEYS.GUEST_MODE);
+    await ensureUserProfile(session.userId, session.email);
+    await resolveSubscriptionForUser(session.userId, session.email);
+    await restoreActiveSessionFromLedger(session.userId);
+    emitAuthChange();
 
     return { success: true, session };
   } catch {
@@ -168,9 +286,15 @@ export async function logout(): Promise<void> {
   } catch {
     // Best-effort sign out from Supabase
   }
+  try {
+    await cancelAllNotifications();
+  } catch {
+    // Best-effort — clearing local data below is what matters
+  }
+  await clearLocalUserData();
   _currentSession = null;
   _isGuestMode = false;
-  await removeItem(STORAGE_KEYS.GUEST_MODE);
+  emitAuthChange();
 }
 
 /**
@@ -187,6 +311,7 @@ export async function restoreSession(): Promise<AuthSession | null> {
       if (guestMode) {
         _isGuestMode = true;
         _currentSession = null;
+        emitAuthChange();
         return null;
       }
       return null;
@@ -201,12 +326,17 @@ export async function restoreSession(): Promise<AuthSession | null> {
 
     _currentSession = session;
     _isGuestMode = false;
+    await ensureUserProfile(session.userId, session.email);
+    await resolveSubscriptionForUser(session.userId, session.email);
+    await restoreActiveSessionFromLedger(session.userId);
+    emitAuthChange();
     return session;
   } catch {
     // Check guest mode fallback
     const guestMode = await getItem<boolean>(STORAGE_KEYS.GUEST_MODE);
     if (guestMode) {
       _isGuestMode = true;
+      emitAuthChange();
     }
     return null;
   }
@@ -222,6 +352,7 @@ export async function refreshToken(): Promise<AuthSession | null> {
 
     if (error || !data.session) {
       _currentSession = null;
+      emitAuthChange();
       return null;
     }
 
@@ -233,9 +364,11 @@ export async function refreshToken(): Promise<AuthSession | null> {
     };
 
     _currentSession = session;
+    emitAuthChange();
     return session;
   } catch {
     _currentSession = null;
+    emitAuthChange();
     return null;
   }
 }
@@ -248,6 +381,7 @@ export async function startGuestSession(): Promise<GuestSession> {
   _isGuestMode = true;
   _currentSession = null;
   await setItem(STORAGE_KEYS.GUEST_MODE, true);
+  emitAuthChange();
   return { userId: 'guest', isGuest: true };
 }
 
@@ -314,6 +448,12 @@ export async function migrateGuestToAccount(
     _currentSession = session;
     _isGuestMode = false;
     await removeItem(STORAGE_KEYS.GUEST_MODE);
+    emitAuthChange();
+
+    // Re-key all locally-stored guest data to the new account so it displays
+    // under and syncs to the authenticated user.
+    await rekeyGuestData(data.user.id);
+    await ensureUserProfile(data.user.id, data.user.email ?? email);
 
     return { success: true };
   } catch (err) {
@@ -322,6 +462,46 @@ export async function migrateGuestToAccount(
       error: `Migration failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
       dataPreserved: true,
     };
+  }
+}
+
+/**
+ * Rewrites the `userId` field of every locally-stored record from the guest
+ * placeholder ("guest") to the authenticated user's id. Covers singleton
+ * records, the session history array, and per-date daily stats.
+ */
+async function rekeyGuestData(userId: string): Promise<void> {
+  // Singleton records that carry a userId field.
+  const singletonKeys = [
+    STORAGE_KEYS.PROFILE,
+    STORAGE_KEYS.STREAK,
+    STORAGE_KEYS.SUBSCRIPTION_STATUS,
+    STORAGE_KEYS.NOTIFICATION_PREFS,
+    STORAGE_KEYS.ACTIVE_SESSION,
+  ];
+  for (const key of singletonKeys) {
+    const record = await getItem<{ userId?: string }>(key);
+    if (record && record.userId === 'guest') {
+      await setItem(key, { ...record, userId });
+    }
+  }
+
+  // Session history is an array of records.
+  const history = await getItem<{ userId?: string }[]>(STORAGE_KEYS.SESSION_HISTORY);
+  if (history) {
+    const rekeyed = history.map((r) => (r.userId === 'guest' ? { ...r, userId } : r));
+    await setItem(STORAGE_KEYS.SESSION_HISTORY, rekeyed);
+  }
+
+  // Daily stats are stored one key per date.
+  const allKeys = await AsyncStorage.getAllKeys();
+  for (const key of allKeys) {
+    if (key.startsWith(STORAGE_KEYS.DAILY_STATS_PREFIX)) {
+      const record = await getItem<{ userId?: string }>(key);
+      if (record && record.userId === 'guest') {
+        await setItem(key, { ...record, userId });
+      }
+    }
   }
 }
 
@@ -362,4 +542,5 @@ export function getCurrentSession(): AuthSession | null {
 export function _resetState(): void {
   _currentSession = null;
   _isGuestMode = false;
+  emitAuthChange();
 }

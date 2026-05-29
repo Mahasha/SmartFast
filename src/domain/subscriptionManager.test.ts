@@ -10,6 +10,7 @@ import {
   hasProAccess,
   setMockStatus,
   handleProDowngrade,
+  resolveSubscriptionForUser,
 } from './subscriptionManager';
 import { SubscriptionStatus, UserProfile } from '../models/index';
 import { PRO_FEATURES } from '../models/plans';
@@ -32,6 +33,7 @@ const mockSubscriptionStatus: SubscriptionStatus = {
   subId: 'sub-1',
   userId: 'user-1',
   tier: 'pro_mock',
+  billingPeriod: 'monthly',
   expiryDate: null,
   trialStartDate: null,
   trialEndDate: null,
@@ -62,6 +64,45 @@ describe('getSubscriptionStatus', () => {
     expect(status.tier).toBe('free');
     expect(status.provider).toBe('local');
     expect(status.expiryDate).toBeNull();
+  });
+});
+
+describe('resolveSubscriptionForUser', () => {
+  it('seeds the annual test account as Pro with an annual billing period', async () => {
+    const status = await resolveSubscriptionForUser(
+      'uid-annual',
+      'mahasha.retshepile@gmail.com',
+    );
+    expect(status.tier).toBe('pro_mock');
+    expect(status.billingPeriod).toBe('annual');
+    expect(status.expiryDate).not.toBeNull();
+
+    // Active key reflects the resolved status.
+    const active = await getSubscriptionStatus();
+    expect(active.tier).toBe('pro_mock');
+    expect(active.billingPeriod).toBe('annual');
+  });
+
+  it('seeds the monthly test account as Pro with a monthly billing period', async () => {
+    const status = await resolveSubscriptionForUser('uid-monthly', 'psp.mahasha@gmail.com');
+    expect(status.tier).toBe('pro_mock');
+    expect(status.billingPeriod).toBe('monthly');
+  });
+
+  it('resolves an unseeded account to free', async () => {
+    const status = await resolveSubscriptionForUser('uid-free', 'someone@example.com');
+    expect(status.tier).toBe('free');
+    expect(status.billingPeriod).toBeNull();
+  });
+
+  it('restores a returning user from the ledger even after the active key is cleared', async () => {
+    await resolveSubscriptionForUser('uid-annual', 'mahasha.retshepile@gmail.com');
+    // Simulate logout wiping the active key (ledger is preserved).
+    await AsyncStorage.removeItem(STORAGE_KEYS.SUBSCRIPTION_STATUS);
+
+    const restored = await resolveSubscriptionForUser('uid-annual', 'anything@else.com');
+    expect(restored.tier).toBe('pro_mock');
+    expect(restored.billingPeriod).toBe('annual');
   });
 });
 

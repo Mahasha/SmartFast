@@ -9,9 +9,17 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import { FastingPlan, FastingSession, TimerState, ClockCheckResult, ForwardJumpResult } from '../models/index';
+import { FastingPlan, FastingSession, FastingProgress, ClockCheckResult, ForwardJumpResult } from '../models/index';
 import { getItem, setItem, removeItem } from '../data/localStorage';
 import { STORAGE_KEYS, clockSuspectKey } from '../utils/constants';
+
+/**
+ * Window after the goal during which the timer reports GOAL_REACHED (for the
+ * one-time celebration). After it, the phase settles into OVERTIME. The
+ * "Goal Achieved" label is shown throughout both phases — this only gates the
+ * momentary celebration.
+ */
+export const GOAL_CELEBRATION_WINDOW_MS = 60_000;
 
 /**
  * Starts a new fasting session based on the given plan.
@@ -46,6 +54,8 @@ export async function startFast(plan: FastingPlan): Promise<FastingSession> {
     actualEndTime: null,
     status: 'ACTIVE',
     durationFasted: null,
+    goalReachedAt: null,
+    completedAt: null,
     timezoneOffsetMinutes: now.getTimezoneOffset(),
     createdAt: startTime,
     updatedAt: startTime,
@@ -57,16 +67,19 @@ export async function startFast(plan: FastingPlan): Promise<FastingSession> {
 }
 
 /**
- * Ends the current active fast early.
+ * Ends the current active fast — the single, user-driven completion path.
  *
- * - Sets status to ENDED_EARLY
- * - Sets actualEndTime to current UTC time
- * - Computes durationFasted in seconds
- * - Persists updated session and clears active session key
+ * Fasting is open-ended: a session is never auto-completed when it reaches its
+ * goal. The user explicitly ends it, at which point:
+ * - status is COMPLETED if the goal was reached (now >= endTime), else ENDED_EARLY
+ * - actualEndTime / completedAt = current UTC time
+ * - durationFasted = actual seconds fasted (start → now), the analytics source of truth
+ * - goalReachedAt = endTime when the goal was reached, else null
+ * - the active session key is cleared
  *
  * Validates: Requirements 7.2, 7.3, 7.5
  */
-export async function endFastEarly(): Promise<FastingSession> {
+export async function endFast(): Promise<FastingSession> {
   const session = await getActiveSession();
   if (session === null) {
     throw new Error('No active fasting session to end.');
@@ -75,17 +88,20 @@ export async function endFastEarly(): Promise<FastingSession> {
   const now = new Date();
   const actualEndTime = now.toISOString();
   const startMs = new Date(session.startTime).getTime();
+  const endMs = new Date(session.endTime).getTime();
+  const reachedGoal = now.getTime() >= endMs;
   const durationFasted = Math.round((now.getTime() - startMs) / 1000);
 
   const updatedSession: FastingSession = {
     ...session,
-    status: 'ENDED_EARLY',
+    status: reachedGoal ? 'COMPLETED' : 'ENDED_EARLY',
     actualEndTime,
+    completedAt: actualEndTime,
+    goalReachedAt: reachedGoal ? session.endTime : null,
     durationFasted,
     updatedAt: actualEndTime,
   };
 
-  await setItem(STORAGE_KEYS.ACTIVE_SESSION, updatedSession);
   await removeItem(STORAGE_KEYS.ACTIVE_SESSION);
 
   return updatedSession;
@@ -116,6 +132,8 @@ export async function cancelFast(): Promise<FastingSession> {
     ...session,
     status: 'CANCELLED',
     actualEndTime,
+    completedAt: actualEndTime,
+    goalReachedAt: null,
     durationFasted,
     updatedAt: actualEndTime,
   };
@@ -143,54 +161,68 @@ export async function getActiveSession(): Promise<FastingSession | null> {
 }
 
 /**
- * Computes the current timer state for an active fasting session.
+ * Computes the current derived progress for a fasting session.
  *
- * - remainingMs = max(0, endTime - now)
- * - elapsedMs = now - startTime
- * - progressFraction = elapsedMs / totalDuration, clamped to [0, 1]
- * - Formats remaining and elapsed as HH:MM:SS
- * - isComplete = true when remainingMs <= 0
+ * Fasting is open-ended: reaching the goal does NOT complete the session. Once
+ * the goal is passed the timer counts up (overtimeMs) while remainingMs stays 0.
+ *
+ * - remainingMs   = max(0, endTime − now)
+ * - overtimeMs    = max(0, now − endTime)
+ * - totalElapsedMs = max(0, now − startTime)
+ * - progressPercent = min(100, totalElapsed / planned * 100) — capped at the goal
+ * - phase: COUNTDOWN before the goal; GOAL_REACHED within the celebration window
+ *   after it; OVERTIME thereafter; COMPLETED for a terminal session.
  *
  * Validates: Requirements 5.1, 5.2, 5.3, 5.4, 5.5
  */
-export function computeProgress(session: FastingSession, now: Date): TimerState {
+export function computeProgress(session: FastingSession, now: Date): FastingProgress {
   const startMs = new Date(session.startTime).getTime();
   const endMs = new Date(session.endTime).getTime();
   const nowMs = now.getTime();
 
-  const totalDurationMs = endMs - startMs;
-  const elapsedMs = nowMs - startMs;
+  const plannedDurationMs = Math.max(0, endMs - startMs);
+  const totalElapsedMs = Math.max(0, nowMs - startMs);
   const remainingMs = Math.max(0, endMs - nowMs);
+  const overtimeMs = Math.max(0, nowMs - endMs);
+  const isGoalReached = nowMs >= endMs;
 
-  // Clamp progress fraction to [0, 1]
-  let progressFraction: number;
-  if (totalDurationMs <= 0) {
-    progressFraction = 1;
+  const progressPercent =
+    plannedDurationMs <= 0
+      ? 100
+      : Math.min(100, Math.max(0, (totalElapsedMs / plannedDurationMs) * 100));
+
+  let phase: FastingProgress['phase'];
+  if (session.status !== 'ACTIVE') {
+    phase = 'COMPLETED';
+  } else if (!isGoalReached) {
+    phase = 'COUNTDOWN';
+  } else if (overtimeMs < GOAL_CELEBRATION_WINDOW_MS) {
+    phase = 'GOAL_REACHED';
   } else {
-    progressFraction = Math.min(1, Math.max(0, elapsedMs / totalDurationMs));
+    phase = 'OVERTIME';
   }
 
-  const isComplete = remainingMs <= 0;
-
   return {
+    phase,
+    isGoalReached,
     remainingMs,
-    elapsedMs,
-    progressFraction,
+    overtimeMs,
+    totalElapsedMs,
+    plannedDurationMs,
+    progressPercent,
     remainingFormatted: formatDuration(remainingMs),
-    elapsedFormatted: formatDuration(elapsedMs),
-    isComplete,
+    overtimeFormatted: formatDuration(overtimeMs),
+    totalElapsedFormatted: formatDuration(totalElapsedMs),
   };
 }
 
 /**
  * Restores a fasting session from AsyncStorage on app launch.
  *
- * - If an ACTIVE session exists and endTime is in the past, marks it as COMPLETED,
- *   sets durationFasted = endTime - startTime, persists the update, clears the
- *   active session key, and returns the completed session.
- * - If an ACTIVE session exists and endTime is in the future, returns it as-is
- *   for timer resumption.
- * - If no session exists, returns null.
+ * Fasting is open-ended, so an ACTIVE session is returned as-is for timer
+ * resumption — even if it is already past its goal (the timer simply resumes in
+ * overtime, counting up). A session is only ever ended by an explicit user
+ * action, never on restore. Returns null if there is no active session.
  *
  * Uses the system clock (new Date()) for all time calculations.
  *
@@ -202,42 +234,8 @@ export async function restoreSession(): Promise<FastingSession | null> {
     return null;
   }
 
-  const now = new Date();
-  const endMs = new Date(session.endTime).getTime();
-
-  if (now.getTime() >= endMs) {
-    // Session expired while app was closed — mark as COMPLETED
-    const completed = await completeSession(session);
-    await removeItem(STORAGE_KEYS.ACTIVE_SESSION);
-    return completed;
-  }
-
-  // Session is still active — return for timer resumption
+  // Active session — resume the timer (in overtime if already past the goal).
   return session;
-}
-
-/**
- * Marks a session as COMPLETED with durationFasted = endTime - startTime.
- *
- * Persists the completed session to AsyncStorage before returning.
- *
- * Validates: Requirements 6.3, 7.1
- */
-export async function completeSession(session: FastingSession): Promise<FastingSession> {
-  const startMs = new Date(session.startTime).getTime();
-  const endMs = new Date(session.endTime).getTime();
-  const durationFasted = Math.round((endMs - startMs) / 1000);
-
-  const completedSession: FastingSession = {
-    ...session,
-    status: 'COMPLETED',
-    durationFasted,
-    updatedAt: new Date().toISOString(),
-  };
-
-  await setItem(STORAGE_KEYS.ACTIVE_SESSION, completedSession);
-
-  return completedSession;
 }
 
 /**

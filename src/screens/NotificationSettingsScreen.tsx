@@ -56,22 +56,16 @@ export function NotificationSettingsScreen() {
   const [showPrePermission, setShowPrePermission] = useState(false);
   const [prefs, setPrefs] = useState<NotificationPreference | null>(null);
 
-  // Load preferences and check permission status on mount
-  useEffect(() => {
-    loadPreferences();
-    checkPermissions();
-  }, []);
-
-  const checkPermissions = async () => {
+  const checkPermissions = useCallback(async () => {
     try {
       const result = await requestPermissions();
       setPermissionGranted(result === 'GRANTED' || result === 'ALREADY_GRANTED');
     } catch {
       setPermissionGranted(false);
     }
-  };
+  }, []);
 
-  const loadPreferences = async () => {
+  const loadPreferences = useCallback(async () => {
     try {
       const raw = await AsyncStorage.getItem(STORAGE_KEYS.NOTIFICATION_PREFS);
       if (raw) {
@@ -100,7 +94,15 @@ export function NotificationSettingsScreen() {
         updatedAt: now,
       });
     }
-  };
+  }, []);
+
+  // Load preferences and check permission status on mount
+  useEffect(() => {
+    void (async () => {
+      await loadPreferences();
+      await checkPermissions();
+    })();
+  }, [loadPreferences, checkPermissions]);
 
   const savePreferences = async (updated: NotificationPreference) => {
     const withTimestamp = { ...updated, updatedAt: new Date().toISOString() };
@@ -211,7 +213,7 @@ export function NotificationSettingsScreen() {
           </Text>
           <Text style={[styles.prePermissionBody, { color: theme.colors.textSecondary }]}>
             FastTrack uses notifications to keep you informed about your fasting progress.
-            You'll receive alerts at key milestones, water reminders to stay hydrated,
+            You&apos;ll receive alerts at key milestones, water reminders to stay hydrated,
             and daily weigh-in reminders to track your progress.
           </Text>
           <Text style={[styles.prePermissionBody, { color: theme.colors.textSecondary }]}>

@@ -25,7 +25,7 @@ import {
 } from '../models/index';
 import { getItem, setItem } from './localStorage';
 import { supabase } from './supabaseClient';
-import { refreshToken } from '../domain/authManager';
+import { refreshToken, getCurrentUserId, isAuthenticated } from '../domain/authManager';
 import { recomputeStreaks } from '../domain/streakEngine';
 import { STORAGE_KEYS } from '../utils/constants';
 
@@ -123,6 +123,16 @@ function isTerminalStatus(status: SessionStatus): boolean {
   return TERMINAL_STATUSES.includes(status);
 }
 
+/**
+ * Stamps the authenticated user's id onto a record before it is written to
+ * Supabase. Records are created locally with a placeholder userId ("guest")
+ * before authentication; Supabase RLS requires `userId = auth.uid()`, so the
+ * real id must be applied at the sync boundary.
+ */
+function stampUserId(payload: SyncableRecord, userId: string): SyncableRecord {
+  return { ...payload, userId };
+}
+
 // ─── Sync Queue Management ───────────────────────────────────────────────────
 
 /**
@@ -195,11 +205,19 @@ export async function getSyncQueueSize(): Promise<number> {
  */
 export async function pushPendingChanges(): Promise<SyncResult> {
   const result: SyncResult = { pushed: 0, pulled: 0, conflicts: 0, errors: [] };
+
+  // Guest sessions never sync — Supabase RLS rejects writes without an auth.uid().
+  if (!isAuthenticated()) {
+    return result;
+  }
+
   const queue = await getQueue();
 
   if (queue.length === 0) {
     return result;
   }
+
+  const userId = getCurrentUserId();
 
   // Sort chronologically by createdAt
   const sorted = [...queue].sort(
@@ -212,7 +230,11 @@ export async function pushPendingChanges(): Promise<SyncResult> {
     const tableName = getTableName(entry.recordType);
 
     try {
-      const { error } = await supabase.from(tableName).upsert(entry.payload);
+      // tableName is resolved at runtime, so the per-table upsert overload
+      // can't narrow the SyncableRecord union — cast past it.
+      const { error } = await supabase
+        .from(tableName)
+        .upsert(stampUserId(entry.payload, userId) as unknown as never);
 
       if (error) {
         if (isAuthRlsError(error)) {
@@ -437,7 +459,9 @@ export async function refreshTokenAndRetry(
   const tableName = getTableName(failedEntry.recordType);
 
   try {
-    const { error } = await supabase.from(tableName).upsert(failedEntry.payload);
+    const { error } = await supabase
+      .from(tableName)
+      .upsert(stampUserId(failedEntry.payload, session.userId) as unknown as never);
 
     if (error) {
       // Retry failed — keep in queue (Requirement 35.12)

@@ -76,9 +76,10 @@ export async function getAllKeys(): Promise<string[]> {
  */
 export async function multiGet<T>(keys: string[]): Promise<(T | null)[]> {
   try {
-    const record = await AsyncStorage.getMany(keys);
+    const entries = await AsyncStorage.multiGet(keys);
+    const valueByKey = new Map(entries.map(([key, value]) => [key, value]));
     return keys.map((key) => {
-      const value = record[key] ?? null;
+      const value = valueByKey.get(key) ?? null;
       if (value === null) {
         return null;
       }
@@ -100,7 +101,7 @@ export async function multiGet<T>(keys: string[]): Promise<(T | null)[]> {
  */
 export async function multiRemove(keys: string[]): Promise<void> {
   try {
-    await AsyncStorage.removeMany(keys);
+    await AsyncStorage.multiRemove(keys);
   } catch (error) {
     throw new Error(
       `[localStorage] Failed to batch remove keys: ${error instanceof Error ? error.message : String(error)}`,

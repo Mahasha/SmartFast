@@ -77,15 +77,27 @@ describe('scheduleFastingMilestones', () => {
     const session = createSession();
     const result = await scheduleFastingMilestones(session);
 
-    // 16h plan >= 12h, so 12h milestone is included
-    // Milestones: Fast Started, Halfway (8h), 12h, 90% (14.4h), Completed (16h)
-    expect(result.length).toBe(5);
+    // 16h plan >= 12h, so 12h milestone is included. After the goal we add a
+    // bounded set of hourly overtime reminders (+1h … +12h past the goal).
+    expect(result.length).toBe(5 + 12);
     expect(result.map((r) => r.milestone)).toEqual([
       'Fast Started',
       'Halfway',
       '12 Hours Reached',
       '90%',
-      'Completed',
+      'Goal Reached',
+      'Overtime +1h',
+      'Overtime +2h',
+      'Overtime +3h',
+      'Overtime +4h',
+      'Overtime +5h',
+      'Overtime +6h',
+      'Overtime +7h',
+      'Overtime +8h',
+      'Overtime +9h',
+      'Overtime +10h',
+      'Overtime +11h',
+      'Overtime +12h',
     ]);
   });
 
@@ -96,11 +108,24 @@ describe('scheduleFastingMilestones', () => {
     const session = createSession();
     const result = await scheduleFastingMilestones(session);
 
-    // Fast Started (6:00), Halfway (14:00) are past. 12h (18:00), 90% (20:24), Completed (22:00) remain
+    // Fast Started (6:00), Halfway (14:00) are past. 12h (18:00), 90% (20:24),
+    // Goal Reached (22:00) and all 12 future overtime marks (23:00 … 10:00) remain.
     expect(result.map((r) => r.milestone)).toEqual([
       '12 Hours Reached',
       '90%',
-      'Completed',
+      'Goal Reached',
+      'Overtime +1h',
+      'Overtime +2h',
+      'Overtime +3h',
+      'Overtime +4h',
+      'Overtime +5h',
+      'Overtime +6h',
+      'Overtime +7h',
+      'Overtime +8h',
+      'Overtime +9h',
+      'Overtime +10h',
+      'Overtime +11h',
+      'Overtime +12h',
     ]);
   });
 
@@ -152,7 +177,7 @@ describe('scheduleFastingMilestones', () => {
 
     expect(Notifications.scheduleNotificationAsync).toHaveBeenCalled();
     const calls = (Notifications.scheduleNotificationAsync as jest.Mock).mock.calls;
-    expect(calls.length).toBe(5);
+    expect(calls.length).toBe(5 + 12);
 
     // Verify the 12h milestone content
     const twelvehCall = calls[2];
@@ -163,8 +188,8 @@ describe('scheduleFastingMilestones', () => {
   });
 
   it('returns empty array when all milestones are in the past', async () => {
-    // Set now to after the session end
-    jest.spyOn(Date, 'now').mockReturnValue(new Date('2024-06-01T23:00:00.000Z').getTime());
+    // Set now past the goal AND the full overtime window (goal 22:00 + 12h = 10:00 next day)
+    jest.spyOn(Date, 'now').mockReturnValue(new Date('2024-06-02T11:00:00.000Z').getTime());
 
     const session = createSession();
     const result = await scheduleFastingMilestones(session);
@@ -182,8 +207,8 @@ describe('cancelSessionNotifications', () => {
 
     await cancelSessionNotifications('session-001');
 
-    // Verify cancel was called for each notification
-    expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledTimes(5);
+    // Verify cancel was called for each notification (5 base + 12 overtime marks)
+    expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledTimes(5 + 12);
   });
 
   it('removes session entry from the stored map', async () => {
@@ -429,19 +454,19 @@ describe('revalidateOnLaunch', () => {
     expect(Notifications.cancelScheduledNotificationAsync).not.toHaveBeenCalled();
   });
 
-  it('ensures completion notification is always scheduled for active sessions', async () => {
-    // Set now to 90% through the fast (past 90% milestone but before completion)
+  it('ensures the goal-reached notification is always scheduled for active sessions', async () => {
+    // Set now to 90% through the fast (past 90% milestone but before the goal)
     jest.spyOn(Date, 'now').mockReturnValue(new Date('2024-06-01T21:00:00.000Z').getTime());
 
     const session = createSession();
-    const result = await revalidateOnLaunch(session);
+    await revalidateOnLaunch(session);
 
-    // The completion notification (at 22:00) should still be scheduled
+    // The goal-reached notification (at 22:00) should still be scheduled
     const calls = (Notifications.scheduleNotificationAsync as jest.Mock).mock.calls;
-    const completionCall = calls.find(
-      (call: any[]) => call[0].content.title === 'Fast Completed',
+    const goalCall = calls.find(
+      (call: any[]) => call[0].content.title === 'Goal Reached!',
     );
-    expect(completionCall).toBeDefined();
+    expect(goalCall).toBeDefined();
   });
 
   it('avoids duplicate notifications by cancelling before rescheduling', async () => {

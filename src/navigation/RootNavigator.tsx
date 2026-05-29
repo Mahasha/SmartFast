@@ -1,18 +1,24 @@
 /**
  * RootNavigator — Top-level navigator that conditionally shows
- * the AuthStack or the main AppNavigator (bottom tabs).
+ * the AuthStack or the main AppNavigator (bottom tabs) based on
+ * the live auth state.
  *
- * For now, always shows AppNavigator. Auth gating will be added
- * in a future task when the Auth Manager is implemented.
+ * On launch it restores any stored session, showing a spinner until
+ * the restore completes. Once auth state is known, authenticated and
+ * guest users see the main tabs; everyone else sees the auth flow.
+ * Because it subscribes to the Auth Manager, logging in / registering /
+ * starting guest mode / logging out automatically swaps the stack.
  *
  * Implements Requirement 24 AC4: screen structure with auth flow.
  */
 
 import React from 'react';
+import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { AppNavigator } from './AppNavigator';
 import { AuthStack } from './AuthStack';
+import { subscribeAuthState, getAuthStatus, restoreSession } from '../domain/authManager';
 
 export type RootStackParamList = {
   Main: undefined;
@@ -22,12 +28,32 @@ export type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export function RootNavigator() {
-  // TODO: Replace with actual auth state check when Auth Manager is implemented
-  const isAuthenticated = true;
+  const authStatus = React.useSyncExternalStore(subscribeAuthState, getAuthStatus);
+  const [restoring, setRestoring] = React.useState(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    restoreSession().finally(() => {
+      if (!cancelled) setRestoring(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (restoring) {
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  const showMain = authStatus === 'authenticated' || authStatus === 'guest';
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {isAuthenticated ? (
+      {showMain ? (
         <Stack.Screen name="Main" component={AppNavigator} />
       ) : (
         <Stack.Screen name="Auth" component={AuthStack} />
@@ -35,3 +61,11 @@ export function RootNavigator() {
     </Stack.Navigator>
   );
 }
+
+const styles = StyleSheet.create({
+  loading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

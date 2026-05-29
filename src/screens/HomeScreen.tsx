@@ -8,23 +8,28 @@
  *            9.4, 13.2, 25.4, 29.1, 29.4
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { CircularTimer } from '../components/CircularTimer';
+import { computeProgress } from '../domain/fastingTimer';
 import {
-  computeProgress,
-  endFastEarly,
-  restoreSession,
-  startFast,
-} from '../domain/fastingTimer';
+  startFastWithLifecycle,
+  endFastWithLifecycle,
+  onAppLaunchLifecycle,
+} from '../domain/timerLifecycle';
+import { useSessionRecovery } from '../domain/useSessionRecovery';
 import { getDailyStats, getLocalDate } from '../domain/dailyTracker';
-import { recomputeStreaks } from '../domain/streakEngine';
-import { FastingSession, TimerState, DailyStats, StreakRecord } from '../models/index';
+import { FastingSession, DailyStats, StreakRecord, UserProfile, FastingPlan } from '../models/index';
 import { FREE_PLANS, ALL_PREDEFINED_PLANS } from '../models/plans';
 import { getItem } from '../data/localStorage';
 import { STORAGE_KEYS } from '../utils/constants';
 import { useTheme } from '../theme/ThemeContext';
+import type { HomeStackParamList } from '../navigation/HomeStack';
+
+type HomeNavProp = NativeStackNavigationProp<HomeStackParamList, 'Dashboard'>;
 
 /**
  * Formats a UTC ISO 8601 timestamp to a local time string (e.g., "2:30 PM").
@@ -44,100 +49,130 @@ function getPlanName(planId: string): string {
 
 export function HomeScreen() {
   const { theme } = useTheme();
+  const navigation = useNavigation<HomeNavProp>();
   const [session, setSession] = useState<FastingSession | null>(null);
-  const [timerState, setTimerState] = useState<TimerState | null>(null);
+  const [now, setNow] = useState<number>(() => Date.now());
   const [dailyStats, setDailyStats] = useState<DailyStats | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<FastingPlan>(FREE_PLANS[0]!);
   const [streakData, setStreakData] = useState<{ current: number; longest: number }>({
     current: 0,
     longest: 0,
   });
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Guards against duplicate "End Fast" taps finalizing the session twice.
+  const endingRef = useRef(false);
 
-  // Restore session and load dashboard data on mount
+  const isActive = session !== null && session.status === 'ACTIVE';
+
+  // Reload the selected plan whenever the screen regains focus, so a change
+  // made on the PlanSelection screen is reflected here on return.
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      (async () => {
+        const profile = await getItem<UserProfile>(STORAGE_KEYS.PROFILE);
+        const plan = ALL_PREDEFINED_PLANS.find((p) => p.planId === profile?.selectedPlanId);
+        if (active && plan) setSelectedPlan(plan);
+      })();
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
+
+  const loadStreak = useCallback(async () => {
+    const cachedStreak = await getItem<StreakRecord>(STORAGE_KEYS.STREAK);
+    if (cachedStreak) {
+      setStreakData({
+        current: cachedStreak.currentStreak,
+        longest: cachedStreak.longestStreak,
+      });
+    }
+  }, []);
+
+  // App-launch lifecycle: restore session, flush/pull sync, load dashboard data.
   useEffect(() => {
-    async function restore() {
-      const restored = await restoreSession();
+    let mounted = true;
+    (async () => {
+      const restored = await onAppLaunchLifecycle();
+      if (!mounted) return;
       if (restored && restored.status === 'ACTIVE') {
         setSession(restored);
       }
-      // Load daily stats
-      const today = getLocalDate();
-      const stats = await getDailyStats(today);
+      const stats = await getDailyStats(getLocalDate());
+      if (!mounted) return;
       setDailyStats(stats);
+      await loadStreak();
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [loadStreak]);
 
-      // Load streak data
-      const cachedStreak = await getItem<StreakRecord>(STORAGE_KEYS.STREAK);
-      if (cachedStreak) {
-        setStreakData({
-          current: cachedStreak.currentStreak,
-          longest: cachedStreak.longestStreak,
-        });
-      }
-    }
-    restore();
-  }, []);
-
-  // Update timer state every second while session is active
+  // Tick the clock every second while a session is active.
   useEffect(() => {
-    if (session && session.status === 'ACTIVE') {
-      // Compute immediately
-      setTimerState(computeProgress(session, new Date()));
+    if (!isActive) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [isActive]);
 
-      intervalRef.current = setInterval(() => {
-        const state = computeProgress(session, new Date());
-        setTimerState(state);
+  const timerState = useMemo(
+    () => (isActive && session ? computeProgress(session, new Date(now)) : null),
+    [isActive, session, now],
+  );
 
-        // Auto-complete detection
-        if (state.isComplete) {
-          if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-          }
-        }
-      }, 1000);
-
-      return () => {
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
-        }
-      };
-    } else {
-      setTimerState(null);
-    }
-  }, [session]);
+  // Recompute progress when returning from background. Fasting is open-ended,
+  // so a session past its goal simply resumes in overtime — never auto-completed.
+  useSessionRecovery({
+    onRecovery: (state) => {
+      setSession(state.session);
+      setNow(Date.now());
+    },
+  });
 
   const handleStartFast = useCallback(async () => {
-    const defaultPlan = FREE_PLANS[0]!;
-    const newSession = await startFast(defaultPlan);
+    const newSession = await startFastWithLifecycle(selectedPlan);
     setSession(newSession);
-  }, []);
+    setNow(Date.now());
+  }, [selectedPlan]);
 
   const handleEndFast = useCallback(() => {
+    const reachedGoal = timerState?.isGoalReached ?? false;
     Alert.alert(
-      'End Fast Early',
-      'Are you sure you want to end your fast early? Your progress will be saved.',
+      reachedGoal ? 'End Fast' : 'End Fast Early',
+      reachedGoal
+        ? 'Great work — ready to end your fast and log it?'
+        : 'Are you sure you want to end your fast before reaching your goal? Your progress will be saved.',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Keep Fasting', style: 'cancel' },
         {
           text: 'End Fast',
-          style: 'destructive',
+          style: reachedGoal ? 'default' : 'destructive',
           onPress: async () => {
-            await endFastEarly();
-            setSession(null);
+            // Ignore duplicate taps — the first finalizes and clears the session.
+            if (endingRef.current) return;
+            endingRef.current = true;
+            try {
+              await endFastWithLifecycle();
+              setSession(null);
+              await loadStreak();
+            } finally {
+              endingRef.current = false;
+            }
           },
         },
       ],
     );
-  }, []);
+  }, [timerState?.isGoalReached, loadStreak]);
 
-  const isActive = session !== null && session.status === 'ACTIVE';
-  const progressFraction = timerState?.progressFraction ?? 0;
-  const progressPercent = Math.round(progressFraction * 100);
+  const progressPercent = Math.round(timerState?.progressPercent ?? 0);
+  const progressFraction = progressPercent / 100;
+  const isGoalReached = timerState?.isGoalReached ?? false;
 
-  const timerAccessibilityLabel = isActive
-    ? `Fasting timer: ${progressPercent}% complete, ${timerState?.remainingFormatted ?? '00:00:00'} remaining`
-    : 'Fasting timer: No active session';
+  const timerAccessibilityLabel = !isActive
+    ? 'Fasting timer: No active session'
+    : isGoalReached
+      ? `Fasting timer: goal reached, ${timerState?.overtimeFormatted ?? '00:00:00'} overtime, ${timerState?.totalElapsedFormatted ?? '00:00:00'} total fasted`
+      : `Fasting timer: ${progressPercent}% complete, ${timerState?.remainingFormatted ?? '00:00:00'} remaining`;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -147,25 +182,44 @@ export function HomeScreen() {
           progressFraction={progressFraction}
           size={240}
           strokeWidth={16}
-          arcColor={theme.colors.timerArc}
+          arcColor={isGoalReached ? theme.colors.goalAccent : theme.colors.timerArc}
           trackColor={theme.colors.timerTrack}
           accessibilityLabel={timerAccessibilityLabel}
         />
         {/* Overlay text inside the timer */}
         <View style={styles.timerOverlay}>
-          <Text
-            style={[styles.remainingTime, { color: theme.colors.text }]}
-            accessibilityLabel={`Remaining time: ${timerState?.remainingFormatted ?? '00:00:00'}`}
-          >
-            {timerState?.remainingFormatted ?? '00:00:00'}
-          </Text>
-          {isActive && (
-            <Text
-              style={[styles.elapsedTime, { color: theme.colors.textSecondary }]}
-              accessibilityLabel={`Elapsed time: ${timerState?.elapsedFormatted ?? '00:00:00'}`}
-            >
-              Elapsed: {timerState?.elapsedFormatted ?? '00:00:00'}
-            </Text>
+          {isActive && isGoalReached ? (
+            <>
+              <Text style={[styles.goalLabel, { color: theme.colors.goalAccent }]}>
+                Goal Achieved 🎉
+              </Text>
+              <Text
+                style={[styles.overtimeTime, { color: theme.colors.goalAccent }]}
+                accessibilityLabel={`Overtime: ${timerState?.overtimeFormatted ?? '00:00:00'}`}
+              >
+                +{timerState?.overtimeFormatted ?? '00:00:00'}
+              </Text>
+              <Text style={[styles.elapsedTime, { color: theme.colors.textSecondary }]}>
+                {timerState?.totalElapsedFormatted ?? '00:00:00'} total fasted
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text
+                style={[styles.remainingTime, { color: theme.colors.text }]}
+                accessibilityLabel={`Remaining time: ${timerState?.remainingFormatted ?? '00:00:00'}`}
+              >
+                {timerState?.remainingFormatted ?? '00:00:00'}
+              </Text>
+              {isActive && (
+                <Text
+                  style={[styles.elapsedTime, { color: theme.colors.textSecondary }]}
+                  accessibilityLabel={`Elapsed time: ${timerState?.totalElapsedFormatted ?? '00:00:00'}`}
+                >
+                  Elapsed: {timerState?.totalElapsedFormatted ?? '00:00:00'}
+                </Text>
+              )}
+            </>
           )}
         </View>
       </View>
@@ -185,24 +239,50 @@ export function HomeScreen() {
           >
             Started at {formatLocalTime(session.startTime)}
           </Text>
+          {isGoalReached && (
+            <View style={[styles.overtimeBadge, { backgroundColor: theme.colors.goalAccent }]}>
+              <Text style={styles.overtimeBadgeText}>OVERTIME</Text>
+            </View>
+          )}
         </View>
       )}
 
       {/* Action buttons */}
       <View style={styles.buttonContainer}>
         {!isActive && (
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: theme.colors.primary }]}
-            onPress={handleStartFast}
-            accessibilityLabel="Start Fast"
-            accessibilityRole="button"
-          >
-            <Text style={styles.buttonText}>Start Fast</Text>
-          </TouchableOpacity>
+          <>
+            <Text
+              style={[styles.selectedPlanLabel, { color: theme.colors.textSecondary }]}
+              accessibilityLabel={`Selected plan: ${selectedPlan.name}, ${selectedPlan.fastingHours} hours fasting`}
+            >
+              Plan: {selectedPlan.name} · {selectedPlan.fastingHours}h fast
+            </Text>
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: theme.colors.primary }]}
+              onPress={handleStartFast}
+              accessibilityLabel="Start Fast"
+              accessibilityRole="button"
+            >
+              <Text style={styles.buttonText}>Start Fast</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.changePlanButton}
+              onPress={() => navigation.navigate('PlanSelection')}
+              accessibilityLabel="Change plan"
+              accessibilityRole="button"
+            >
+              <Text style={[styles.changePlanText, { color: theme.colors.primary }]}>
+                Change Plan
+              </Text>
+            </TouchableOpacity>
+          </>
         )}
         {isActive && (
           <TouchableOpacity
-            style={[styles.button, { backgroundColor: theme.colors.error }]}
+            style={[
+              styles.button,
+              { backgroundColor: isGoalReached ? theme.colors.goalAccent : theme.colors.error },
+            ]}
             onPress={handleEndFast}
             accessibilityLabel="End Fast"
             accessibilityRole="button"
@@ -212,9 +292,12 @@ export function HomeScreen() {
         )}
       </View>
 
-      {/* Streak Display */}
-      <View
+      {/* Streak Display — tap to view the Streaks & Achievements calendar */}
+      <TouchableOpacity
         style={[styles.streakContainer, { backgroundColor: theme.colors.surface }]}
+        onPress={() => navigation.navigate('Streaks')}
+        accessibilityRole="button"
+        accessibilityHint="Tap to view streaks and achievements"
         accessibilityLabel={`Current streak: ${streakData.current} days. Longest streak: ${streakData.longest} days.`}
       >
         <View style={styles.streakItem}>
@@ -234,7 +317,19 @@ export function HomeScreen() {
             Longest Streak
           </Text>
         </View>
-      </View>
+      </TouchableOpacity>
+
+      {/* Fasting History link */}
+      <TouchableOpacity
+        style={styles.historyButton}
+        onPress={() => navigation.navigate('FastingHistory')}
+        accessibilityRole="button"
+        accessibilityLabel="View fasting history"
+      >
+        <Text style={[styles.historyButtonText, { color: theme.colors.primary }]}>
+          View Fasting History
+        </Text>
+      </TouchableOpacity>
 
       {/* Daily Stats Summary */}
       {dailyStats && (
@@ -243,7 +338,7 @@ export function HomeScreen() {
           accessibilityLabel="Today's daily stats"
         >
           <Text style={[styles.statsTitle, { color: theme.colors.text }]}>
-            Today's Stats
+            Today&apos;s Stats
           </Text>
           <View style={styles.statsGrid}>
             {dailyStats.waterIntake !== null && (
@@ -314,9 +409,30 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: '700',
   },
+  goalLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  overtimeTime: {
+    fontSize: 30,
+    fontWeight: '700',
+  },
   elapsedTime: {
     fontSize: 14,
     marginTop: 4,
+  },
+  overtimeBadge: {
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  overtimeBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
   },
   infoContainer: {
     alignItems: 'center',
@@ -334,12 +450,25 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
   },
+  selectedPlanLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 12,
+  },
   button: {
     paddingVertical: 16,
     paddingHorizontal: 48,
     borderRadius: 12,
     minWidth: 200,
     alignItems: 'center',
+  },
+  changePlanButton: {
+    marginTop: 12,
+    paddingVertical: 8,
+  },
+  changePlanText: {
+    fontSize: 15,
+    fontWeight: '600',
   },
   buttonText: {
     color: '#FFFFFF',
@@ -372,6 +501,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
     fontWeight: '500',
+  },
+  historyButton: {
+    marginTop: 12,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  historyButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
   },
   statsContainer: {
     borderRadius: 12,

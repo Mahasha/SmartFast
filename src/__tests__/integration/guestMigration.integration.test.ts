@@ -132,6 +132,32 @@ describe('Guest Mode → Migration Integration', () => {
       expect(getCurrentUserId()).toBe('new-user-id');
     });
 
+    it('re-keys local guest data to the new account on migration', async () => {
+      await startGuestSession();
+
+      // Local records created in guest mode carry the placeholder userId.
+      await setItem(STORAGE_KEYS.SESSION_HISTORY, [
+        { sessionId: 's1', userId: 'guest', status: 'COMPLETED' },
+      ]);
+      await setItem(STORAGE_KEYS.STREAK, { streakId: 'streak-local', userId: 'guest' });
+
+      mockSignUp.mockResolvedValue({
+        data: {
+          user: { id: 'new-user-id', email: 'test@example.com' },
+          session: { access_token: 'token-123', refresh_token: 'refresh-123' },
+        },
+        error: null,
+      });
+
+      const result = await migrateGuestToAccount('test@example.com', 'password123');
+      expect(result.success).toBe(true);
+
+      const history = await getItem<{ userId: string }[]>(STORAGE_KEYS.SESSION_HISTORY);
+      expect(history![0]!.userId).toBe('new-user-id');
+      const streak = await getItem<{ userId: string }>(STORAGE_KEYS.STREAK);
+      expect(streak!.userId).toBe('new-user-id');
+    });
+
     it('should fail migration when email already exists', async () => {
       await startGuestSession();
 

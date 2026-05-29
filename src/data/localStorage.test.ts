@@ -147,8 +147,8 @@ describe('localStorage', () => {
     });
 
     it('throws a descriptive error when batch removal fails', async () => {
-      const mockRemoveMany = AsyncStorage.removeMany as unknown as jest.Mock;
-      mockRemoveMany.mockRejectedValueOnce(new Error('Storage error'));
+      const mockMultiRemove = AsyncStorage.multiRemove as unknown as jest.Mock;
+      mockMultiRemove.mockRejectedValueOnce(new Error('Storage error'));
       await expect(
         multiRemove(['@fasttrack:x', '@fasttrack:y']),
       ).rejects.toThrow(

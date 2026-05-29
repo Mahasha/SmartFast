@@ -20,8 +20,10 @@ import {
 } from 'react-native';
 
 import { useTheme } from '../theme/ThemeContext';
-import { setItem } from '../data/localStorage';
+import { getItem, setItem } from '../data/localStorage';
 import { STORAGE_KEYS } from '../utils/constants';
+import { UserProfile } from '../models/index';
+import { saveProfile } from '../domain/profileManager';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -71,21 +73,21 @@ interface FreePlan {
 
 const FREE_PLANS: FreePlan[] = [
   {
-    planId: 'plan_12_12',
+    planId: 'plan-12-12',
     name: '12:12',
     fastingHours: 12,
     eatingHours: 12,
     description: 'Beginner-friendly — equal fasting and eating windows.',
   },
   {
-    planId: 'plan_14_10',
+    planId: 'plan-14-10',
     name: '14:10',
     fastingHours: 14,
     eatingHours: 10,
     description: 'A gentle step up — slightly longer fasting window.',
   },
   {
-    planId: 'plan_16_8',
+    planId: 'plan-16-8',
     name: '16:8',
     fastingHours: 16,
     eatingHours: 8,
@@ -98,7 +100,7 @@ const FREE_PLANS: FreePlan[] = [
 export function OnboardingScreen() {
   const { theme } = useTheme();
   const [currentStep, setCurrentStep] = useState(0);
-  const [selectedPlanId, setSelectedPlanId] = useState<string>('plan_16_8');
+  const [selectedPlanId, setSelectedPlanId] = useState<string>('plan-16-8');
 
   const step = ONBOARDING_STEPS[currentStep]!;
   const isLastStep = currentStep === ONBOARDING_STEPS.length - 1;
@@ -119,12 +121,17 @@ export function OnboardingScreen() {
     // Persist onboarding completion and selected plan
     await setItem(STORAGE_KEYS.ONBOARDING_COMPLETE, true);
 
-    // Store selected plan in profile
-    const profile = {
-      selectedPlanId,
-      onboardingCompleted: true,
-    };
-    await setItem(STORAGE_KEYS.PROFILE, profile);
+    // Merge into the existing profile (seeded at sign-in) so we keep
+    // userId/email/displayName and only update the plan + completion flag.
+    const existing = await getItem<UserProfile>(STORAGE_KEYS.PROFILE);
+    if (existing) {
+      await saveProfile({
+        ...existing,
+        selectedPlanId,
+        onboardingCompleted: true,
+        updatedAt: new Date().toISOString(),
+      });
+    }
 
     // Navigation to dashboard is handled by root navigator
     // detecting onboarding completion state change

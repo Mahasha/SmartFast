@@ -7,7 +7,7 @@
  * Validates: Requirements 10.1, 10.2, 10.3
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   FlatList,
   Modal,
@@ -17,6 +17,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { useTheme } from '../theme/ThemeContext';
 import { FastingSession, DailyStats } from '../models/index';
@@ -101,11 +102,7 @@ export function FastingHistoryScreen() {
   const [dailyStats, setDailyStats] = useState<DailyStats | null>(null);
   const [showDetail, setShowDetail] = useState(false);
 
-  useEffect(() => {
-    loadSessions();
-  }, []);
-
-  const loadSessions = async () => {
+  const loadSessions = useCallback(async () => {
     const history = await getItem<FastingSession[]>(STORAGE_KEYS.SESSION_HISTORY);
     if (history) {
       // Sort reverse chronological
@@ -114,7 +111,13 @@ export function FastingHistoryScreen() {
       );
       setSessions(sorted);
     }
-  };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadSessions();
+    }, [loadSessions]),
+  );
 
   const handleSelectSession = useCallback(async (session: FastingSession) => {
     setSelectedSession(session);

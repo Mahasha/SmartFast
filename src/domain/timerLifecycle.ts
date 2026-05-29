@@ -13,10 +13,9 @@ import { FastingPlan, FastingSession } from '../models/index';
 import { ALL_PREDEFINED_PLANS } from '../models/plans';
 import {
   startFast as timerStartFast,
-  endFastEarly as timerEndFastEarly,
+  endFast as timerEndFast,
   cancelFast as timerCancelFast,
   restoreSession as timerRestoreSession,
-  completeSession,
 } from './fastingTimer';
 import { enqueue, pushPendingChanges, pullRemoteChanges } from '../data/syncEngine';
 import {
@@ -28,6 +27,11 @@ import { recomputeStreaks } from './streakEngine';
 import { getItem, setItem } from '../data/localStorage';
 import { STORAGE_KEYS } from '../utils/constants';
 import { handleSyncError, handleNotificationError } from '../utils/errorHandling';
+import { getCurrentUserId } from './authManager';
+import {
+  saveActiveSessionToLedger,
+  clearActiveSessionFromLedger,
+} from './activeSessionLedger';
 
 // ─── Lifecycle Functions ─────────────────────────────────────────────────────
 
@@ -45,6 +49,9 @@ export async function startFastWithLifecycle(plan: FastingPlan): Promise<Fasting
 
   // 2. Add to session history
   await addToSessionHistory(session);
+
+  // Remember the active fast per-user so it survives logout (Requirement 6.x).
+  await saveActiveSessionToLedger(getCurrentUserId(), session);
 
   // 3. Enqueue sync (non-blocking)
   try {
@@ -64,32 +71,48 @@ export async function startFastWithLifecycle(plan: FastingPlan): Promise<Fasting
 }
 
 /**
- * Ends a fast early with full lifecycle wiring:
- * 1. Update session via FastingTimer
- * 2. Enqueue sync
- * 3. Cancel notifications
+ * Ends the active fast — the single, user-driven completion path. The fast is
+ * never auto-completed at its goal; this runs when the user taps "End Fast",
+ * whether before the goal (ENDED_EARLY) or in overtime (COMPLETED).
  *
- * Validates: Requirements 7.3, 14.6
+ * 1. Finalize session via FastingTimer (status + actual duration)
+ * 2. Update session history
+ * 3. Drop the per-user active-session ledger entry
+ * 4. Enqueue sync
+ * 5. Cancel notifications
+ * 6. Recompute streaks so the dashboard reflects the result immediately
+ *
+ * Validates: Requirements 7.3, 14.6, 23.2
  */
-export async function endFastEarlyWithLifecycle(): Promise<FastingSession> {
-  // 1. End fast early
-  const session = await timerEndFastEarly();
+export async function endFastWithLifecycle(): Promise<FastingSession> {
+  // 1. Finalize the fast (COMPLETED if goal reached, else ENDED_EARLY)
+  const session = await timerEndFast();
 
   // 2. Update session history
   await updateSessionHistory(session);
 
-  // 3. Enqueue sync (non-blocking)
+  // 3. The fast is over — drop the per-user active-session ledger entry.
+  await clearActiveSessionFromLedger(getCurrentUserId());
+
+  // 4. Enqueue sync (non-blocking)
   try {
     await enqueue(session);
   } catch (error) {
     handleSyncError(error, 0);
   }
 
-  // 4. Cancel notifications (non-blocking)
+  // 5. Cancel notifications (non-blocking)
   try {
     await cancelSessionNotifications(session.sessionId);
   } catch (error) {
     handleNotificationError(error, 'cancelSessionNotifications');
+  }
+
+  // 6. Recompute streaks (non-blocking) so Home updates without a relaunch.
+  try {
+    await recomputeAndCacheStreaks();
+  } catch (error) {
+    console.warn('[TimerLifecycle] Streak recomputation failed:', error);
   }
 
   return session;
@@ -110,6 +133,9 @@ export async function cancelFastWithLifecycle(): Promise<FastingSession> {
   // 2. Update session history
   await updateSessionHistory(session);
 
+  // The fast is over — drop the per-user active-session ledger entry.
+  await clearActiveSessionFromLedger(getCurrentUserId());
+
   // 3. Enqueue sync (non-blocking)
   try {
     await enqueue(session);
@@ -128,50 +154,20 @@ export async function cancelFastWithLifecycle(): Promise<FastingSession> {
 }
 
 /**
- * Handles auto-completion of a fasting session:
- * 1. Mark session as COMPLETED
- * 2. Enqueue sync
- * 3. Trigger streak recomputation
- *
- * Validates: Requirements 4.3, 23.2
- */
-export async function autoCompleteWithLifecycle(session: FastingSession): Promise<FastingSession> {
-  // 1. Complete the session
-  const completed = await completeSession(session);
-
-  // 2. Update session history
-  await updateSessionHistory(completed);
-
-  // 3. Enqueue sync (non-blocking)
-  try {
-    await enqueue(completed);
-  } catch (error) {
-    handleSyncError(error, 0);
-  }
-
-  // 4. Trigger streak recomputation
-  try {
-    await recomputeAndCacheStreaks();
-  } catch (error) {
-    console.warn('[TimerLifecycle] Streak recomputation failed:', error);
-  }
-
-  return completed;
-}
-
-/**
  * Handles app launch lifecycle:
- * 1. Restore session from storage
- * 2. Revalidate notifications for active session
- * 3. Trigger sync pull
+ * 1. Restore session from storage (resumes in overtime if past the goal)
+ * 2. Revalidate notifications for the active session (re-extends overtime marks)
+ * 3. Trigger sync push/pull
  *
  * Validates: Requirements 14.6, 23.2
  */
 export async function onAppLaunchLifecycle(): Promise<FastingSession | null> {
-  // 1. Restore session
+  // 1. Restore session — open-ended, so an over-goal session is still ACTIVE.
   const session = await timerRestoreSession();
 
-  // 2. Revalidate notifications if session is active
+  // 2. Revalidate notifications if session is active. revalidateOnLaunch
+  //    reschedules goal + overtime marks relative to now, re-extending the
+  //    bounded overtime window on every launch.
   if (session && session.status === 'ACTIVE') {
     try {
       await revalidateOnLaunch(session);
@@ -180,22 +176,13 @@ export async function onAppLaunchLifecycle(): Promise<FastingSession | null> {
     }
   }
 
-  // 3. If session was auto-completed during restore, handle lifecycle
-  if (session && session.status === 'COMPLETED') {
-    await updateSessionHistory(session);
-    try {
-      await enqueue(session);
-    } catch (error) {
-      handleSyncError(error, 0);
-    }
-    try {
-      await recomputeAndCacheStreaks();
-    } catch {
-      // Non-blocking
-    }
+  // 3. Flush any queued local changes, then pull remote (non-blocking).
+  //    push is a no-op in guest mode (guarded inside pushPendingChanges).
+  try {
+    await pushPendingChanges();
+  } catch (error) {
+    handleSyncError(error, 0);
   }
-
-  // 4. Trigger sync pull (non-blocking)
   try {
     await pullRemoteChanges();
   } catch (error) {
