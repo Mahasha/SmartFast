@@ -119,7 +119,7 @@ export function ProfileScreen() {
         accessibilityLabel="Profile information"
       >
         {/* Display Name */}
-        <View style={styles.row}>
+        <View style={[styles.row, { borderBottomColor: theme.colors.border }]}>
           <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
             Display Name
           </Text>
@@ -171,7 +171,7 @@ export function ProfileScreen() {
         </View>
 
         {/* Email */}
-        <View style={styles.row}>
+        <View style={[styles.row, { borderBottomColor: theme.colors.border }]}>
           <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
             Email
           </Text>
@@ -184,7 +184,7 @@ export function ProfileScreen() {
         </View>
 
         {/* Selected Plan */}
-        <View style={styles.row}>
+        <View style={[styles.row, { borderBottomColor: theme.colors.border }]}>
           <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
             Selected Plan
           </Text>
@@ -197,7 +197,7 @@ export function ProfileScreen() {
         </View>
 
         {/* Subscription Status */}
-        <View style={styles.row}>
+        <View style={[styles.row, { borderBottomColor: theme.colors.border }]}>
           <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
             Subscription
           </Text>
@@ -223,7 +223,7 @@ export function ProfileScreen() {
       {/* Navigation Links */}
       <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
         <TouchableOpacity
-          style={styles.navRow}
+          style={[styles.navRow, { borderBottomColor: theme.colors.border }]}
           onPress={() => navigation.navigate('Settings')}
           accessibilityLabel="Settings"
           accessibilityRole="button"
@@ -234,7 +234,7 @@ export function ProfileScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.navRow}
+          style={[styles.navRow, { borderBottomColor: theme.colors.border }]}
           onPress={() => navigation.navigate('NotificationSettings')}
           accessibilityLabel="Notification Settings"
           accessibilityRole="button"
@@ -281,7 +281,6 @@ const styles = StyleSheet.create({
   row: {
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
   },
   label: {
     fontSize: 13,
@@ -340,7 +339,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
   },
   navText: {
     fontSize: 16,

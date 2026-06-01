@@ -3,6 +3,9 @@
  *
  * Defines light and dark Theme objects with dark green accent,
  * pastel card palette, timer arc/track colors, and semantic colors.
+ *
+ * The dark theme is a true OLED-black, minimalist palette (#000000 background,
+ * near-black surfaces, hairline borders) and is the app's default appearance.
  */
 
 export interface Theme {
@@ -18,6 +21,8 @@ export interface Theme {
     text: string;
     /** Secondary/muted text */
     textSecondary: string;
+    /** Subtle border / hairline separator color */
+    border: string;
     /** Circular timer progress arc color */
     timerArc: string;
     /** Circular timer background track color */
@@ -51,6 +56,7 @@ export const lightTheme: Theme = {
     surface: '#FFFFFF',
     text: '#1C1C1E',
     textSecondary: '#6B7280',
+    border: '#E5E5E5',
     timerArc: '#2E7D32',
     timerTrack: '#E0E0E0',
     goalAccent: '#C8A028', // gold
@@ -72,19 +78,22 @@ export const lightTheme: Theme = {
 };
 
 /**
- * Dark theme tokens.
- * Uses a dark background with the same dark green accent adjusted for dark mode.
+ * Dark theme tokens — true OLED black, minimalist.
+ * Pure-black (#000000) background saves power on OLED panels; cards use a dark
+ * grey (#1E1E1E) for slight elevation, with subtle borders. Keeps the muted
+ * green accent for continuity.
  */
 export const darkTheme: Theme = {
   mode: 'dark',
   colors: {
-    primary: '#66BB6A', // lighter green for dark backgrounds
-    background: '#121212',
-    surface: '#1E1E1E',
-    text: '#F5F5F5',
-    textSecondary: '#9CA3AF',
-    timerArc: '#66BB6A',
-    timerTrack: '#333333',
+    primary: '#6DBE71', // muted green primary action color
+    background: '#000000', // true OLED black
+    surface: '#1E1E1E', // dark grey cards for slight elevation
+    text: '#F5F5F5', // high-contrast primary text
+    textSecondary: '#A0A0A0', // legible secondary text on #000000 and #1E1E1E
+    border: '#2A2A2A', // subtle separators, visible on black and on cards
+    timerArc: '#6DBE71',
+    timerTrack: '#2A2A2A',
     goalAccent: '#FFD54F', // gold (lifted for dark backgrounds)
     cardPastel: [
       '#1B5E20', // muted green

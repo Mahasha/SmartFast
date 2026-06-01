@@ -6,6 +6,7 @@
  * - PlanSelection — Choose or change fasting plan
  * - Streaks — Streaks & Achievements calendar view
  * - FastingHistory — Past fasting sessions list
+ * - MealJournal — Daily meal timeline & journal
  *
  * Implements Requirement 24 AC4: nested navigation within Home tab.
  */
@@ -18,12 +19,14 @@ import { HomeScreen } from '../screens/HomeScreen';
 import { PlanSelectionScreen } from '../screens/PlanSelectionScreen';
 import { StreaksScreen } from '../screens/StreaksScreen';
 import { FastingHistoryScreen } from '../screens/FastingHistoryScreen';
+import { MealJournalScreen } from '../screens/MealJournalScreen';
 
 export type HomeStackParamList = {
   Dashboard: undefined;
   PlanSelection: undefined;
   Streaks: undefined;
   FastingHistory: undefined;
+  MealJournal: undefined;
 };
 
 const Stack = createNativeStackNavigator<HomeStackParamList>();
@@ -59,6 +62,11 @@ export function HomeStack() {
         name="FastingHistory"
         component={FastingHistoryScreen}
         options={{ title: 'Fasting History' }}
+      />
+      <Stack.Screen
+        name="MealJournal"
+        component={MealJournalScreen}
+        options={{ title: 'Meal Journal' }}
       />
     </Stack.Navigator>
   );

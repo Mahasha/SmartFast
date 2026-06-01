@@ -71,3 +71,14 @@ jest.mock('expo-notifications', () => ({
   AndroidImportance: { DEFAULT: 3, HIGH: 4 },
   SchedulableTriggerInputTypes: { DATE: 'date', TIME_INTERVAL: 'timeInterval' },
 }));
+
+// Mock the `expo` package so suites that transitively import it (via the native
+// FastingService façade in timerLifecycle / useSessionRecovery) don't pull
+// Expo's strict-mode TS source into ts-jest. requireNativeModule throws here;
+// the façade catches it and degrades to a no-op (Platform.OS is not 'android'
+// in tests anyway), so no foreground-service calls run during tests.
+jest.mock('expo', () => ({
+  requireNativeModule: jest.fn(() => {
+    throw new Error('Native module unavailable in tests');
+  }),
+}));

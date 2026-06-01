@@ -32,6 +32,11 @@ import {
   saveActiveSessionToLedger,
   clearActiveSessionFromLedger,
 } from './activeSessionLedger';
+import {
+  startFastingService,
+  updateFastingService,
+  stopFastingService,
+} from '../native/FastingService';
 
 // ─── Lifecycle Functions ─────────────────────────────────────────────────────
 
@@ -65,6 +70,17 @@ export async function startFastWithLifecycle(plan: FastingPlan): Promise<Fasting
     await scheduleFastingMilestones(session);
   } catch (error) {
     handleNotificationError(error, 'scheduleFastingMilestones');
+  }
+
+  // 5. Start the native foreground service (ongoing chronometer notification).
+  try {
+    startFastingService({
+      startTimeMillis: new Date(session.startTime).getTime(),
+      goalTimeMillis: new Date(session.endTime).getTime(),
+      planName: plan.name,
+    });
+  } catch (error) {
+    handleNotificationError(error, 'startFastingService');
   }
 
   return session;
@@ -106,6 +122,13 @@ export async function endFastWithLifecycle(): Promise<FastingSession> {
     await cancelSessionNotifications(session.sessionId);
   } catch (error) {
     handleNotificationError(error, 'cancelSessionNotifications');
+  }
+
+  // 5b. Stop the foreground service / ongoing notification.
+  try {
+    stopFastingService();
+  } catch (error) {
+    handleNotificationError(error, 'stopFastingService');
   }
 
   // 6. Recompute streaks (non-blocking) so Home updates without a relaunch.
@@ -150,6 +173,13 @@ export async function cancelFastWithLifecycle(): Promise<FastingSession> {
     handleNotificationError(error, 'cancelSessionNotifications');
   }
 
+  // 5. Stop the foreground service / ongoing notification.
+  try {
+    stopFastingService();
+  } catch (error) {
+    handleNotificationError(error, 'stopFastingService');
+  }
+
   return session;
 }
 
@@ -173,6 +203,25 @@ export async function onAppLaunchLifecycle(): Promise<FastingSession | null> {
       await revalidateOnLaunch(session);
     } catch (error) {
       handleNotificationError(error, 'revalidateOnLaunch');
+    }
+    // Re-establish the ongoing foreground notification (recomputes phase).
+    try {
+      const planName =
+        ALL_PREDEFINED_PLANS.find((p) => p.planId === session.planId)?.name ?? 'Fasting';
+      updateFastingService({
+        startTimeMillis: new Date(session.startTime).getTime(),
+        goalTimeMillis: new Date(session.endTime).getTime(),
+        planName,
+      });
+    } catch (error) {
+      handleNotificationError(error, 'updateFastingService');
+    }
+  } else {
+    // No active fast — clear any stale tile left by a killed process.
+    try {
+      stopFastingService();
+    } catch (error) {
+      handleNotificationError(error, 'stopFastingService');
     }
   }
 

@@ -12,6 +12,8 @@ import { useEffect, useRef, useCallback } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { FastingSession, FastingProgress } from '../models/index';
 import { getActiveSession, computeProgress } from './fastingTimer';
+import { updateFastingService, stopFastingService } from '../native/FastingService';
+import { ALL_PREDEFINED_PLANS } from '../models/plans';
 
 export interface SessionRecoveryState {
   session: FastingSession | null;
@@ -81,6 +83,12 @@ export async function recoverSession(
   const session = await getActiveSession();
 
   if (session === null) {
+    // No active fast — clear any lingering foreground notification.
+    try {
+      stopFastingService();
+    } catch {
+      // best-effort; the notification is non-critical
+    }
     const state: SessionRecoveryState = {
       session: null,
       timerState: null,
@@ -92,6 +100,19 @@ export async function recoverSession(
 
   const now = new Date();
   const timerState = computeProgress(session, now);
+
+  // Re-establish the ongoing foreground notification on return to foreground.
+  try {
+    const planName =
+      ALL_PREDEFINED_PLANS.find((p) => p.planId === session.planId)?.name ?? 'Fasting';
+    updateFastingService({
+      startTimeMillis: new Date(session.startTime).getTime(),
+      goalTimeMillis: new Date(session.endTime).getTime(),
+      planName,
+    });
+  } catch {
+    // best-effort; the timer is correct regardless of the notification
+  }
 
   // Session still active — resume (in overtime if past the goal).
   const state: SessionRecoveryState = {

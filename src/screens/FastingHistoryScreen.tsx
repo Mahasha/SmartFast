@@ -39,14 +39,6 @@ function formatLocalDateTime(isoString: string): string {
 }
 
 /**
- * Formats a UTC ISO 8601 timestamp to a local time string.
- */
-function formatLocalTime(isoString: string): string {
-  const date = new Date(isoString);
-  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-}
-
-/**
  * Formats duration in seconds to a human-readable string.
  */
 function formatDuration(seconds: number | null): string {
@@ -319,9 +311,10 @@ function DetailRow({
   textColor: string;
   labelColor: string;
 }) {
+  const { theme } = useTheme();
   return (
     <View
-      style={detailRowStyles.row}
+      style={[detailRowStyles.row, { borderBottomColor: theme.colors.border }]}
       accessibilityLabel={`${label}: ${value}`}
     >
       <Text style={[detailRowStyles.label, { color: labelColor }]}>{label}</Text>
@@ -337,7 +330,6 @@ const detailRowStyles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(0,0,0,0.08)',
   },
   label: {
     fontSize: 14,

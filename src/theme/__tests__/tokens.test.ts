@@ -118,6 +118,7 @@ describe('lightTheme', () => {
       'surface',
       'text',
       'textSecondary',
+      'border',
       'timerArc',
       'timerTrack',
       'cardPastel',
@@ -157,6 +158,7 @@ describe('darkTheme', () => {
       'surface',
       'text',
       'textSecondary',
+      'border',
       'timerArc',
       'timerTrack',
       'cardPastel',
@@ -171,7 +173,16 @@ describe('darkTheme', () => {
   });
 
   it('has a lighter green primary for dark backgrounds', () => {
-    expect(darkTheme.colors.primary).toBe('#66BB6A');
+    expect(darkTheme.colors.primary).toBe('#6DBE71');
+  });
+
+  it('uses a true OLED black background', () => {
+    expect(darkTheme.colors.background).toBe('#000000');
+  });
+
+  it('uses a dark-grey surface and a subtle border', () => {
+    expect(darkTheme.colors.surface).toBe('#1E1E1E');
+    expect(darkTheme.colors.border).toBe('#2A2A2A');
   });
 
   it('has a non-empty cardPastel palette', () => {
@@ -183,6 +194,6 @@ describe('darkTheme', () => {
   });
 
   it('uses lighter green accent for timerArc in dark mode', () => {
-    expect(darkTheme.colors.timerArc).toBe('#66BB6A');
+    expect(darkTheme.colors.timerArc).toBe('#6DBE71');
   });
 });

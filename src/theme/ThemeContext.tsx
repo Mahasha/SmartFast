@@ -7,7 +7,7 @@
  * - onThemeChange(callback): subscribes to theme changes, returns unsubscribe fn
  *
  * System-theme detection uses the react-native Appearance API.
- * Defaults to system preference on first launch.
+ * Defaults to dark (OLED) on first launch; switchable to light or system in Settings.
  */
 
 import React, {
@@ -80,7 +80,8 @@ interface ThemeProviderProps {
 }
 
 export function ThemeProvider({ children }: ThemeProviderProps) {
-  const [preference, setPreference] = useState<ThemePreference>('system');
+  // Default to dark (OLED) on first launch. Users can switch to light/system.
+  const [preference, setPreference] = useState<ThemePreference>('dark');
   const [systemScheme, setSystemScheme] = useState<ColorSchemeName>(
     Appearance.getColorScheme(),
   );
@@ -106,7 +107,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
         ) {
           setPreference(stored);
         }
-        // If nothing stored, default remains 'system'
+        // If nothing stored, default remains 'dark' (OLED)
       } catch {
         // Silently default to 'system' on read failure
       } finally {

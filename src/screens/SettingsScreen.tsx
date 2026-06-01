@@ -28,7 +28,6 @@ import { saveProfile } from '../domain/profileManager';
 import { deleteAccount } from '../utils/errorHandling';
 import {
   getSubscriptionStatus,
-  hasProAccess,
   setMockStatus,
   handleProDowngrade,
 } from '../domain/subscriptionManager';
@@ -119,8 +118,10 @@ export function SettingsScreen() {
   }, [devTapCount]);
 
   const handleToggleSubscription = useCallback(async () => {
-    const newTier = hasProAccess(subscriptionTier as any) ? 'free' : 'pro_mock';
-    await setMockStatus(newTier as any);
+    // Toggle on the ACTUAL stored tier (not hasProAccess, which is forced true
+    // by PRO_UNLOCKED_FOR_LAUNCH) so the dev toggle can switch free <-> pro_mock.
+    const newTier = subscriptionTier === 'free' ? 'pro_mock' : 'free';
+    await setMockStatus(newTier);
     setSubscriptionTier(newTier);
     setBillingPeriod(newTier === 'free' ? null : 'monthly');
 
@@ -163,7 +164,7 @@ export function SettingsScreen() {
         {themeOptions.map((option) => (
           <TouchableOpacity
             key={option.value}
-            style={styles.optionRow}
+            style={[styles.optionRow, { borderBottomColor: theme.colors.border }]}
             onPress={() => handleThemeChange(option.value)}
             accessibilityLabel={`Theme: ${option.label}`}
             accessibilityRole="radio"
@@ -196,7 +197,7 @@ export function SettingsScreen() {
         {unitOptions.map((option) => (
           <TouchableOpacity
             key={option.value}
-            style={styles.optionRow}
+            style={[styles.optionRow, { borderBottomColor: theme.colors.border }]}
             onPress={() => handleUnitChange(option.value)}
             accessibilityLabel={`Unit preference: ${option.label}`}
             accessibilityRole="radio"
@@ -227,7 +228,7 @@ export function SettingsScreen() {
       </Text>
       <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
         <TouchableOpacity
-          style={styles.optionRow}
+          style={[styles.optionRow, { borderBottomColor: theme.colors.border }]}
           onPress={handleLogout}
           accessibilityLabel="Log out"
           accessibilityRole="button"
@@ -235,7 +236,7 @@ export function SettingsScreen() {
           <Text style={[styles.optionText, { color: theme.colors.text }]}>Log Out</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.optionRow}
+          style={[styles.optionRow, { borderBottomColor: theme.colors.border }]}
           onPress={handleDeleteAccount}
           accessibilityLabel="Delete account"
           accessibilityRole="button"
@@ -258,14 +259,14 @@ export function SettingsScreen() {
           </Text>
           <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
             <TouchableOpacity
-              style={styles.optionRow}
+              style={[styles.optionRow, { borderBottomColor: theme.colors.border }]}
               onPress={handleToggleSubscription}
-              accessibilityLabel={`Toggle subscription. Current: ${hasProAccess(subscriptionTier as any) ? 'PRO' : 'FREE'}`}
+              accessibilityLabel={`Toggle subscription. Current: ${subscriptionTier === 'free' ? 'FREE' : 'PRO'}`}
               accessibilityRole="button"
             >
               <Text style={[styles.optionText, { color: theme.colors.text }]}>
                 Subscription:{' '}
-                {hasProAccess(subscriptionTier as any)
+                {subscriptionTier !== 'free'
                   ? `PRO (Mock)${billingPeriod ? ` · ${billingPeriod === 'annual' ? 'Annual' : 'Monthly'}` : ''}`
                   : 'FREE'}
               </Text>
@@ -317,7 +318,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
   },
   optionText: {
     fontSize: 16,

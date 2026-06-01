@@ -145,7 +145,7 @@ export function PaywallScreen() {
       </Text>
       <View style={[styles.comparisonTable, { backgroundColor: theme.colors.surface }]}>
         {/* Table Header */}
-        <View style={styles.tableHeader}>
+        <View style={[styles.tableHeader, { borderBottomColor: theme.colors.border }]}>
           <Text style={[styles.tableHeaderFeature, { color: theme.colors.textSecondary }]}>
             Feature
           </Text>
@@ -161,7 +161,7 @@ export function PaywallScreen() {
         {FEATURE_COMPARISON.map((row, index) => (
           <View
             key={index}
-            style={styles.tableRow}
+            style={[styles.tableRow, { borderBottomColor: theme.colors.border }]}
             accessibilityLabel={`${row.feature}: ${row.free ? 'included in Free' : 'not in Free'}, ${row.pro ? 'included in Pro' : 'not in Pro'}`}
           >
             <Text
@@ -284,7 +284,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingBottom: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
     marginBottom: 4,
   },
   tableHeaderFeature: {
@@ -305,7 +304,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(0,0,0,0.05)',
   },
   tableFeature: {
     flex: 3,

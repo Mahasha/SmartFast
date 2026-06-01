@@ -12,6 +12,7 @@ export { ProfileScreen } from './ProfileScreen';
 export { PlanSelectionScreen } from './PlanSelectionScreen';
 export { StreaksScreen } from './StreaksScreen';
 export { FastingHistoryScreen } from './FastingHistoryScreen';
+export { MealJournalScreen } from './MealJournalScreen';
 
 // Profile stack screens
 export { SettingsScreen } from './SettingsScreen';

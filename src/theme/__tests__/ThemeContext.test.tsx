@@ -31,18 +31,18 @@ describe('ThemeProvider', () => {
     (Appearance.getColorScheme as jest.Mock).mockReturnValue('light');
   });
 
-  it('defaults to system preference (light when system is light)', async () => {
+  it('defaults to dark (OLED) on first launch when system is light', async () => {
     const { result } = renderHook(() => useTheme(), { wrapper });
 
     await waitFor(() => {
-      expect(result.current.preference).toBe('system');
+      expect(result.current.preference).toBe('dark');
     });
 
-    expect(result.current.theme.mode).toBe('light');
-    expect(result.current.theme).toEqual(lightTheme);
+    expect(result.current.theme.mode).toBe('dark');
+    expect(result.current.theme).toEqual(darkTheme);
   });
 
-  it('defaults to system preference (dark when system is dark)', async () => {
+  it('defaults to dark (OLED) on first launch even when system is dark', async () => {
     (Appearance.getColorScheme as jest.Mock).mockReturnValue('dark');
 
     const { result } = renderHook(() => useTheme(), { wrapper });
@@ -51,7 +51,7 @@ describe('ThemeProvider', () => {
       expect(result.current.theme.mode).toBe('dark');
     });
 
-    expect(result.current.preference).toBe('system');
+    expect(result.current.preference).toBe('dark');
     expect(result.current.theme).toEqual(darkTheme);
   });
 
@@ -84,6 +84,14 @@ describe('ThemeProvider', () => {
   it('setTheme changes the active theme to dark', async () => {
     const { result } = renderHook(() => useTheme(), { wrapper });
 
+    // App defaults to dark now — wait for load, switch to light, then back to dark.
+    await waitFor(() => {
+      expect(result.current.theme.mode).toBe('dark');
+    });
+
+    act(() => {
+      result.current.setTheme('light');
+    });
     await waitFor(() => {
       expect(result.current.theme.mode).toBe('light');
     });
@@ -118,18 +126,19 @@ describe('ThemeProvider', () => {
   it('setTheme persists preference to AsyncStorage', async () => {
     const { result } = renderHook(() => useTheme(), { wrapper });
 
+    // Wait for load (defaults to dark), then persist a different value (light).
     await waitFor(() => {
-      expect(result.current.theme.mode).toBe('light');
+      expect(result.current.theme.mode).toBe('dark');
     });
 
     act(() => {
-      result.current.setTheme('dark');
+      result.current.setTheme('light');
     });
 
     // Wait for async persistence
     await waitFor(async () => {
       const stored = await AsyncStorage.getItem('@fasttrack:themePreference');
-      expect(stored).toBe('dark');
+      expect(stored).toBe('light');
     });
   });
 

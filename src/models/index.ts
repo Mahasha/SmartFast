@@ -175,3 +175,27 @@ export type ClockCheckResult =
 export type ForwardJumpResult =
   | { suspicious: false }
   | { suspicious: true; jumpMs: number };
+
+// ─── Meal Entry (local-only journal) ─────────────────────────────────────────
+
+/**
+ * A single logged meal in the daily journal.
+ *
+ * LOCAL-ONLY by design: `MealEntry` is intentionally NOT part of
+ * `SyncableRecord` / the Supabase sync queue above. Meals — and especially
+ * their photos — live entirely on the device (AsyncStorage + the app document
+ * directory). `photoUri` is a device-local `file://` path with no meaning
+ * off-device, so there is nothing to sync. This keeps the meal journal at zero
+ * cloud cost.
+ */
+export interface MealEntry {
+  mealId: string;                   // UUID
+  userId: string;                   // Supabase Auth userId or "guest"
+  localDate: string;                // "YYYY-MM-DD" in the user's local timezone
+  name: string;
+  calories: number | null;          // kcal; null when not provided
+  photoUri: string | null;          // device-local file URI; null for text-only meals
+  loggedAt: string;                 // UTC ISO 8601 — meal time, used for timeline ordering
+  createdAt: string;                // UTC ISO 8601
+  updatedAt: string;                // UTC ISO 8601
+}

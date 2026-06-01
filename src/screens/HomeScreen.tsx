@@ -9,7 +9,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -308,7 +308,7 @@ export function HomeScreen() {
             Current Streak
           </Text>
         </View>
-        <View style={styles.streakDivider} />
+        <View style={[styles.streakDivider, { backgroundColor: theme.colors.border }]} />
         <View style={styles.streakItem}>
           <Text style={[styles.streakValue, { color: theme.colors.text }]}>
             {streakData.longest}
@@ -328,6 +328,18 @@ export function HomeScreen() {
       >
         <Text style={[styles.historyButtonText, { color: theme.colors.primary }]}>
           View Fasting History
+        </Text>
+      </TouchableOpacity>
+
+      {/* Meal Journal link */}
+      <TouchableOpacity
+        style={styles.historyButton}
+        onPress={() => navigation.navigate('MealJournal')}
+        accessibilityRole="button"
+        accessibilityLabel="Open meal journal"
+      >
+        <Text style={[styles.historyButtonText, { color: theme.colors.primary }]}>
+          Meal Journal
         </Text>
       </TouchableOpacity>
 
@@ -491,7 +503,6 @@ const styles = StyleSheet.create({
   streakDivider: {
     width: 1,
     height: 32,
-    backgroundColor: 'rgba(0,0,0,0.1)',
   },
   streakValue: {
     fontSize: 28,

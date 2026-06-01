@@ -19,7 +19,11 @@ export type ProFeature =
   | 'EXTENDED_FASTS'
   | 'DETAILED_ANALYTICS'
   | 'STREAK_INSIGHTS'
-  | 'ACHIEVEMENT_BADGES';
+  | 'ACHIEVEMENT_BADGES'
+  // Visual meal journal (photo logging). Phase 1: the daily free-tier limit is
+  // enforced tier-based in mealJournal.ts; this entry will become the unified
+  // gate once Google Play Billing replaces PRO_UNLOCKED_FOR_LAUNCH.
+  | 'VISUAL_MEAL_JOURNAL';
 
 /**
  * Complete list of all Pro-gated features for iteration and validation.
@@ -31,6 +35,7 @@ export const PRO_FEATURES: ProFeature[] = [
   'DETAILED_ANALYTICS',
   'STREAK_INSIGHTS',
   'ACHIEVEMENT_BADGES',
+  'VISUAL_MEAL_JOURNAL',
 ];
 
 // ─── Free Fasting Plans ──────────────────────────────────────────────────────

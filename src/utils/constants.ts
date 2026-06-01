@@ -18,6 +18,12 @@ export const STORAGE_KEYS = {
   /** Daily stats for a specific date. Append :{YYYY-MM-DD} */
   DAILY_STATS_PREFIX: '@fasttrack:dailyStats:',
 
+  /**
+   * Meal-journal entries for a specific date (an array of MealEntry).
+   * Append :{YYYY-MM-DD}. Local-only — never enqueued to the Supabase sync queue.
+   */
+  MEALS_PREFIX: '@fasttrack:meals:',
+
   /** Cached streak record */
   STREAK: '@fasttrack:streak',
 
@@ -80,6 +86,11 @@ export const STORAGE_KEYS = {
 /** Helper to build a daily stats key for a specific date */
 export function dailyStatsKey(date: string): string {
   return `${STORAGE_KEYS.DAILY_STATS_PREFIX}${date}`;
+}
+
+/** Helper to build a meals key for a specific date */
+export function mealsKey(date: string): string {
+  return `${STORAGE_KEYS.MEALS_PREFIX}${date}`;
 }
 
 /** Helper to build a clock suspect key for a specific session */
