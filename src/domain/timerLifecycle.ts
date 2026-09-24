@@ -24,6 +24,7 @@ import {
   revalidateOnLaunch,
 } from './notificationScheduler';
 import { recomputeStreaks } from './streakEngine';
+import { verifiedSessions } from './fastingTimer';
 import { getItem, setItem } from '../data/localStorage';
 import { STORAGE_KEYS } from '../utils/constants';
 import { handleSyncError, handleNotificationError } from '../utils/errorHandling';
@@ -271,7 +272,7 @@ async function updateSessionHistory(session: FastingSession): Promise<void> {
  */
 async function recomputeAndCacheStreaks(): Promise<void> {
   const history = (await getItem<FastingSession[]>(STORAGE_KEYS.SESSION_HISTORY)) ?? [];
-  const streakResult = recomputeStreaks(history, ALL_PREDEFINED_PLANS, new Date());
+  const streakResult = recomputeStreaks(await verifiedSessions(history), ALL_PREDEFINED_PLANS, new Date());
 
   const existingStreak = await getItem<{ streakId: string; userId: string; createdAt: string }>(
     STORAGE_KEYS.STREAK,

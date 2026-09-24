@@ -24,9 +24,14 @@ import {
   SessionStatus,
 } from '../models/index';
 import { getItem, setItem } from './localStorage';
+import { getQueue, mutateQueue } from './syncQueue';
+export { enqueue } from './syncQueue';
 import { supabase } from './supabaseClient';
 import { refreshToken, getCurrentUserId, isAuthenticated } from '../domain/authManager';
 import { recomputeStreaks } from '../domain/streakEngine';
+import { saveProfile } from '../domain/profileManager';
+import { verifiedSessions } from '../domain/fastingTimer';
+import { UserProfile } from '../models/index';
 import { STORAGE_KEYS } from '../utils/constants';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -49,29 +54,6 @@ export type SyncRetryResult =
   | { success: false; reason: string };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-/**
- * Determines the record type for a SyncableRecord based on its shape.
- */
-function getRecordType(record: SyncableRecord): SyncQueueEntry['recordType'] {
-  if ('sessionId' in record) return 'fasting_session';
-  if ('statsId' in record) return 'daily_stats';
-  if ('streakId' in record) return 'streak';
-  if ('prefId' in record) return 'notification_preference';
-  return 'profile';
-}
-
-/**
- * Extracts the primary ID from a SyncableRecord.
- */
-function getRecordId(record: SyncableRecord): string {
-  if ('sessionId' in record) return record.sessionId;
-  if ('statsId' in record) return record.statsId;
-  if ('streakId' in record) return record.streakId;
-  if ('prefId' in record) return record.prefId;
-  if ('userId' in record) return record.userId;
-  return '';
-}
 
 /**
  * Returns the Supabase table name for a given record type.
@@ -133,57 +115,12 @@ function stampUserId(payload: SyncableRecord, userId: string): SyncableRecord {
   return { ...payload, userId };
 }
 
-// ─── Sync Queue Management ───────────────────────────────────────────────────
-
-/**
- * Reads the current sync queue from AsyncStorage.
- */
-async function getQueue(): Promise<SyncQueueEntry[]> {
-  const queue = await getItem<SyncQueueEntry[]>(STORAGE_KEYS.SYNC_QUEUE);
-  return queue ?? [];
-}
-
-/**
- * Writes the sync queue to AsyncStorage.
- */
-async function saveQueue(queue: SyncQueueEntry[]): Promise<void> {
-  await setItem(STORAGE_KEYS.SYNC_QUEUE, queue);
-}
-
-// ─── Core SyncEngine Functions ───────────────────────────────────────────────
-
-/**
- * Enqueues a record for sync. Adds it to the sync queue in AsyncStorage.
- *
- * Validates: Requirements 23.3, 8.2
- */
-export async function enqueue(record: SyncableRecord): Promise<void> {
-  const queue = await getQueue();
-
-  const entry: SyncQueueEntry = {
-    id: uuidv4(),
-    recordType: getRecordType(record),
-    recordId: getRecordId(record),
-    operation: 'CREATE',
-    payload: record,
-    createdAt: new Date().toISOString(),
-    retryCount: 0,
-  };
-
-  // If there's already an entry for this record, update it (dedup)
-  const existingIndex = queue.findIndex(
-    (e) => e.recordId === entry.recordId && e.recordType === entry.recordType,
-  );
-
-  if (existingIndex >= 0) {
-    entry.operation = 'UPDATE';
-    entry.retryCount = queue[existingIndex]!.retryCount;
-    queue[existingIndex] = entry;
-  } else {
-    queue.push(entry);
-  }
-
-  await saveQueue(queue);
+async function upsertRecord(entry: SyncQueueEntry, userId: string) {
+  const table = supabase.from(getTableName(entry.recordType));
+  const payload = stampUserId(entry.payload, userId) as unknown as never;
+  return entry.recordType === 'daily_stats'
+    ? table.upsert(payload, { onConflict: 'userId,localDate' })
+    : table.upsert(payload);
 }
 
 /**
@@ -225,16 +162,11 @@ export async function pushPendingChanges(): Promise<SyncResult> {
   );
 
   const remaining: SyncQueueEntry[] = [];
+  const pushedIds = new Set<string>();
 
   for (const entry of sorted) {
-    const tableName = getTableName(entry.recordType);
-
     try {
-      // tableName is resolved at runtime, so the per-table upsert overload
-      // can't narrow the SyncableRecord union — cast past it.
-      const { error } = await supabase
-        .from(tableName)
-        .upsert(stampUserId(entry.payload, userId) as unknown as never);
+      const { error } = await upsertRecord(entry, userId);
 
       if (error) {
         if (isAuthRlsError(error)) {
@@ -242,6 +174,7 @@ export async function pushPendingChanges(): Promise<SyncResult> {
           const retryResult = await refreshTokenAndRetry(entry);
           if (retryResult.success) {
             result.pushed++;
+            pushedIds.add(entry.id);
           } else {
             // Keep in queue (Requirement 35.12)
             entry.retryCount++;
@@ -264,6 +197,7 @@ export async function pushPendingChanges(): Promise<SyncResult> {
         }
       } else {
         result.pushed++;
+        pushedIds.add(entry.id);
       }
     } catch (err) {
       // Network error — keep in queue
@@ -277,7 +211,17 @@ export async function pushPendingChanges(): Promise<SyncResult> {
     }
   }
 
-  await saveQueue(remaining);
+  // Newer enqueue calls replace an entry with a new ID. Remove only the exact
+  // snapshot entries that were pushed, leaving edits made during this push.
+  if (isAuthenticated() && getCurrentUserId() === userId) {
+    const failedById = new Map(remaining.map((entry) => [entry.id, entry]));
+    await mutateQueue((current) => ({
+      queue: current
+        .filter((entry) => !pushedIds.has(entry.id))
+        .map((entry) => failedById.get(entry.id) ?? entry),
+      result: undefined,
+    }));
+  }
   return result;
 }
 
@@ -346,19 +290,31 @@ export async function pullRemoteChanges(): Promise<SyncResult> {
       .from('daily_stats')
       .select('*');
 
-    if (!statsError && remoteStats) {
+    if (statsError) {
+      result.errors.push({ recordId: '', message: statsError.message, isAuthError: isAuthRlsError(statsError) });
+    } else if (remoteStats) {
       for (const stat of remoteStats) {
         const key = `${STORAGE_KEYS.DAILY_STATS_PREFIX}${stat.localDate}`;
         const localStat = await getItem(key);
-        if (!localStat) {
-          await setItem(key, stat);
-          result.pulled++;
-        } else {
-          const resolved = resolveConflict(localStat as SyncableRecord, stat as SyncableRecord);
-          await setItem(key, resolved);
-          result.pulled++;
-        }
+        const resolved = localStat
+          ? resolveConflict(localStat as SyncableRecord, stat as SyncableRecord)
+          : stat;
+        await setItem(key, resolved);
+        result.pulled++;
       }
+    }
+
+    const { data: remoteProfile, error: profileError } = await supabase
+      .from('profiles').select('*').eq('userId', getCurrentUserId()).maybeSingle();
+    if (profileError) {
+      result.errors.push({ recordId: '', message: profileError.message, isAuthError: isAuthRlsError(profileError) });
+    } else if (remoteProfile) {
+      const localProfile = await getItem<UserProfile>(STORAGE_KEYS.PROFILE);
+      const resolved = localProfile
+        ? resolveConflict(localProfile, remoteProfile as UserProfile) as UserProfile
+        : remoteProfile as UserProfile;
+      await saveProfile(resolved, false);
+      result.pulled++;
     }
   } catch (err) {
     result.errors.push({
@@ -456,12 +412,8 @@ export async function refreshTokenAndRetry(
   }
 
   // Retry the write once (Requirement 35.11)
-  const tableName = getTableName(failedEntry.recordType);
-
   try {
-    const { error } = await supabase
-      .from(tableName)
-      .upsert(stampUserId(failedEntry.payload, session.userId) as unknown as never);
+    const { error } = await upsertRecord(failedEntry, session.userId);
 
     if (error) {
       // Retry failed — keep in queue (Requirement 35.12)
@@ -491,7 +443,7 @@ async function triggerStreakRecomputation(sessions: FastingSession[]): Promise<v
     const { data: plans } = await supabase.from('fasting_plans').select('*');
 
     if (plans && plans.length > 0) {
-      const streakResult = recomputeStreaks(sessions, plans, new Date());
+      const streakResult = recomputeStreaks(await verifiedSessions(sessions), plans, new Date());
 
       // Update cached streak record
       const existingStreak = await getItem<{ streakId: string; userId: string; createdAt: string }>(

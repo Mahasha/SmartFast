@@ -102,145 +102,21 @@ describe('checkClockIntegrity - backward drift detection', () => {
 });
 
 describe('checkForwardClockJump - forward jump detection', () => {
-  it('returns suspicious: false for normal progression (10 seconds between checks)', () => {
-    // Normal operation: last check at T+8h with 8h elapsed, now is 10s later
-    const lastTimerCheckUtc = new Date('2024-01-01T08:00:00.000Z');
-    const lastKnownElapsedMs = 8 * 60 * 60 * 1000; // 8 hours
-    const now = new Date('2024-01-01T08:00:10.000Z'); // 10 seconds later
+  const lastCheck = new Date('2024-01-01T04:00:00.000Z');
 
-    const result = checkForwardClockJump(
-      baseSession,
-      now,
-      lastTimerCheckUtc,
-      lastKnownElapsedMs,
-    );
-
-    expect(result).toEqual({ suspicious: false });
+  it('accepts wall and monotonic clocks advancing together', () => {
+    expect(checkForwardClockJump(new Date('2024-01-01T04:05:00.000Z'), lastCheck, 5 * 60 * 1000))
+      .toEqual({ suspicious: false });
   });
 
-  it('returns suspicious: false for normal progression (5 minutes between checks)', () => {
-    const lastTimerCheckUtc = new Date('2024-01-01T04:00:00.000Z');
-    const lastKnownElapsedMs = 4 * 60 * 60 * 1000; // 4 hours
-    const now = new Date('2024-01-01T04:05:00.000Z'); // 5 minutes later
-
-    const result = checkForwardClockJump(
-      baseSession,
-      now,
-      lastTimerCheckUtc,
-      lastKnownElapsedMs,
-    );
-
-    expect(result).toEqual({ suspicious: false });
+  it('detects a fifteen-minute wall-clock jump after ten seconds elapsed', () => {
+    expect(checkForwardClockJump(new Date('2024-01-01T04:15:10.000Z'), lastCheck, 10_000))
+      .toEqual({ suspicious: true, jumpMs: 15 * 60 * 1000 });
   });
 
-  it('returns suspicious: false when values are consistent (no discrepancy)', () => {
-    // lastKnownElapsedMs matches (lastTimerCheckUtc - startTime) exactly
-    const lastTimerCheckUtc = new Date('2024-01-01T04:00:00.000Z');
-    const lastKnownElapsedMs = 4 * 60 * 60 * 1000; // exactly 4h = lastCheck - start
-    const now = new Date('2024-01-01T04:10:00.000Z'); // 10 minutes later
-
-    const result = checkForwardClockJump(
-      baseSession,
-      now,
-      lastTimerCheckUtc,
-      lastKnownElapsedMs,
-    );
-
-    expect(result).toEqual({ suspicious: false });
-  });
-
-  it('returns suspicious: true when elapsed exceeds wall clock by more than 10 minutes', () => {
-    // jumpMs = lastKnownElapsedMs - (lastTimerCheckUtc - startTime)
-    // = (4h + 15min) - 4h = 15 min > 10 min threshold
-    // This indicates a clock discrepancy where the timer recorded more elapsed
-    // time than the wall clock shows between start and last check
-    const lastTimerCheckUtc = new Date('2024-01-01T04:00:00.000Z'); // 4h after start
-    const lastKnownElapsedMs = (4 * 60 + 15) * 60 * 1000; // 4h 15min in ms
-    const now = new Date('2024-01-01T04:00:10.000Z'); // 10s after last check
-
-    const result = checkForwardClockJump(
-      baseSession,
-      now,
-      lastTimerCheckUtc,
-      lastKnownElapsedMs,
-    );
-
-    expect(result.suspicious).toBe(true);
-    if (result.suspicious) {
-      expect(result.jumpMs).toBeGreaterThan(10 * 60 * 1000);
-    }
-  });
-
-  it('returns suspicious: false when discrepancy is under 10 minutes', () => {
-    // jumpMs = (4h + 5min) - 4h = 5 min < 10 min threshold
-    const lastTimerCheckUtc = new Date('2024-01-01T04:00:00.000Z');
-    const lastKnownElapsedMs = (4 * 60 + 5) * 60 * 1000; // 4h 5min
-    const now = new Date('2024-01-01T04:00:10.000Z');
-
-    const result = checkForwardClockJump(
-      baseSession,
-      now,
-      lastTimerCheckUtc,
-      lastKnownElapsedMs,
-    );
-
-    expect(result).toEqual({ suspicious: false });
-  });
-
-  it('returns the correct jumpMs value', () => {
-    // jumpMs = lastKnownElapsedMs - (lastTimerCheckUtc - startTime) + (now - lastTimerCheckUtc) - (now - startTime - lastKnownElapsedMs)
-    // Simplified: jumpMs = lastKnownElapsedMs - (lastTimerCheckUtc - startTime)
-    // = (4h + 20min) - 4h = 20 min = 1,200,000 ms
-    const lastTimerCheckUtc = new Date('2024-01-01T04:00:00.000Z');
-    const lastKnownElapsedMs = (4 * 60 + 20) * 60 * 1000; // 4h 20min
-    const now = new Date('2024-01-01T04:00:10.000Z');
-
-    const result = checkForwardClockJump(
-      baseSession,
-      now,
-      lastTimerCheckUtc,
-      lastKnownElapsedMs,
-    );
-
-    expect(result.suspicious).toBe(true);
-    if (result.suspicious) {
-      expect(result.jumpMs).toBe(20 * 60 * 1000);
-    }
-  });
-
-  it('returns suspicious: false when discrepancy is exactly 10 minutes', () => {
-    // jumpMs = (4h + 10min) - 4h = 10 min = threshold (not exceeded)
-    const lastTimerCheckUtc = new Date('2024-01-01T04:00:00.000Z');
-    const lastKnownElapsedMs = (4 * 60 + 10) * 60 * 1000; // 4h 10min
-    const now = new Date('2024-01-01T04:00:00.000Z'); // same as last check
-
-    const result = checkForwardClockJump(
-      baseSession,
-      now,
-      lastTimerCheckUtc,
-      lastKnownElapsedMs,
-    );
-
-    expect(result).toEqual({ suspicious: false });
-  });
-
-  it('returns suspicious: true when discrepancy is just over 10 minutes', () => {
-    // jumpMs = (4h + 10min + 1s) - 4h = 10min + 1s > 10 min threshold
-    const lastTimerCheckUtc = new Date('2024-01-01T04:00:00.000Z');
-    const lastKnownElapsedMs = 4 * 60 * 60 * 1000 + 10 * 60 * 1000 + 1000; // 4h 10min 1s
-    const now = new Date('2024-01-01T04:00:00.000Z');
-
-    const result = checkForwardClockJump(
-      baseSession,
-      now,
-      lastTimerCheckUtc,
-      lastKnownElapsedMs,
-    );
-
-    expect(result.suspicious).toBe(true);
-    if (result.suspicious) {
-      expect(result.jumpMs).toBe(10 * 60 * 1000 + 1000); // 10min + 1s
-    }
+  it('does not flag a ten-minute difference at the threshold', () => {
+    expect(checkForwardClockJump(new Date('2024-01-01T04:10:10.000Z'), lastCheck, 10_000))
+      .toEqual({ suspicious: false });
   });
 });
 

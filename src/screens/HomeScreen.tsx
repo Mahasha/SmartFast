@@ -9,12 +9,13 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, AppState, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { CircularTimer } from '../components/CircularTimer';
-import { computeProgress } from '../domain/fastingTimer';
+import { checkForwardClockJump, clearClockSuspect, computeProgress, isClockSuspect, markClockSuspect } from '../domain/fastingTimer';
+import { persistTimerTick } from '../domain/timerTickPersistence';
 import {
   startFastWithLifecycle,
   endFastWithLifecycle,
@@ -60,6 +61,7 @@ export function HomeScreen() {
   });
   // Guards against duplicate "End Fast" taps finalizing the session twice.
   const endingRef = useRef(false);
+  const clockAlertedRef = useRef<string | null>(null);
 
   const isActive = session !== null && session.status === 'ACTIVE';
 
@@ -108,12 +110,40 @@ export function HomeScreen() {
     };
   }, [loadStreak]);
 
-  // Tick the clock every second while a session is active.
+  // Compare wall time with a monotonic clock while this process is active.
+  // Reset the baseline after backgrounding because device sleep can pause JS.
   useEffect(() => {
-    if (!isActive) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [isActive]);
+    if (!isActive || !session) return;
+    let baseline: { wall: number; monotonic: number } | null = {
+      wall: Date.now(), monotonic: performance.now(),
+    };
+    let lastPersist = 0;
+    const appState = AppState.addEventListener('change', (state) => {
+      baseline = state === 'active' ? { wall: Date.now(), monotonic: performance.now() } : null;
+    });
+    const id = setInterval(() => {
+      const wall = Date.now();
+      const monotonic = performance.now();
+      if (baseline) {
+        const result = checkForwardClockJump(new Date(wall), new Date(baseline.wall), monotonic - baseline.monotonic);
+        if (result.suspicious && clockAlertedRef.current !== session.sessionId) {
+          clockAlertedRef.current = session.sessionId;
+          void markClockSuspect(session.sessionId);
+          Alert.alert('Device clock changed', 'This fast needs a time review before it counts toward your streak.');
+        }
+      }
+      baseline = { wall, monotonic };
+      if (wall - lastPersist >= 10_000) {
+        lastPersist = wall;
+        void persistTimerTick(session);
+      }
+      setNow(wall);
+    }, 1000);
+    return () => {
+      clearInterval(id);
+      appState.remove();
+    };
+  }, [isActive, session]);
 
   const timerState = useMemo(
     () => (isActive && session ? computeProgress(session, new Date(now)) : null),
@@ -148,21 +178,37 @@ export function HomeScreen() {
           text: 'End Fast',
           style: reachedGoal ? 'default' : 'destructive',
           onPress: async () => {
-            // Ignore duplicate taps — the first finalizes and clears the session.
-            if (endingRef.current) return;
-            endingRef.current = true;
-            try {
-              await endFastWithLifecycle();
-              setSession(null);
-              await loadStreak();
-            } finally {
-              endingRef.current = false;
+            const finalize = async () => {
+              if (endingRef.current) return;
+              endingRef.current = true;
+              try {
+                await endFastWithLifecycle();
+                setSession(null);
+                await loadStreak();
+              } finally {
+                endingRef.current = false;
+              }
+            };
+            if (session && await isClockSuspect(session.sessionId)) {
+              Alert.alert(
+                'Review fasting time',
+                'Your device clock changed during this fast. Confirm that the displayed start and end times are accurate before it counts toward your streak.',
+                [
+                  { text: 'Keep Fasting', style: 'cancel' },
+                  { text: 'Confirm Times', onPress: async () => {
+                    await clearClockSuspect(session.sessionId);
+                    await finalize();
+                  } },
+                ],
+              );
+              return;
             }
+            await finalize();
           },
         },
       ],
     );
-  }, [timerState?.isGoalReached, loadStreak]);
+  }, [timerState?.isGoalReached, loadStreak, session]);
 
   const progressPercent = Math.round(timerState?.progressPercent ?? 0);
   const progressFraction = progressPercent / 100;

@@ -55,6 +55,9 @@ export const STORAGE_KEYS = {
   /** Array of pending sync entries */
   SYNC_QUEUE: '@fasttrack:syncQueue',
 
+  /** Pending sync entries saved separately for each account on logout */
+  SYNC_QUEUE_LEDGER: '@fasttrack:syncQueueLedger',
+
   /** Map of sessionId → notification IDs */
   SCHEDULED_NOTIFICATIONS: '@fasttrack:scheduledNotifications',
 

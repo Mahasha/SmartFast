@@ -296,6 +296,27 @@ describe('SyncEngine - pushPendingChanges', () => {
     expect(size).toBe(0);
   });
 
+  test('keeps a newer edit enqueued while an older version is in flight', async () => {
+    await enqueue(createSession());
+    let begin!: () => void;
+    let finish!: (value: { error: null }) => void;
+    const started = new Promise<void>((resolve) => { begin = resolve; });
+    const response = new Promise<{ error: null }>((resolve) => { finish = resolve; });
+    (mockSupabase.from as jest.Mock).mockReturnValue({
+      upsert: jest.fn(() => { begin(); return response; }),
+    });
+
+    const pushing = pushPendingChanges();
+    await started;
+    await enqueue(createSession({ status: 'COMPLETED', updatedAt: '2024-01-02T01:00:00.000Z' }));
+    finish({ error: null });
+    await pushing;
+
+    const queue = JSON.parse((await AsyncStorage.getItem(STORAGE_KEYS.SYNC_QUEUE))!) as SyncQueueEntry[];
+    expect(queue).toHaveLength(1);
+    expect((queue[0]!.payload as FastingSession).status).toBe('COMPLETED');
+  });
+
   test('returns empty result when queue is empty', async () => {
     const result = await pushPendingChanges();
     expect(result.pushed).toBe(0);
