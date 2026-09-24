@@ -14,6 +14,7 @@
 import { UserProfile } from '../models/index';
 import { getItem, setItem } from '../data/localStorage';
 import { STORAGE_KEYS } from '../utils/constants';
+import { enqueue } from '../data/syncQueue';
 
 type ProfileLedger = Record<string, UserProfile>;
 
@@ -34,11 +35,12 @@ export async function getLedgerProfile(userId: string): Promise<UserProfile | un
  * Persists a profile to the active PROFILE key and the per-user ledger.
  * Guest profiles are intentionally local-only, so they skip the ledger.
  */
-export async function saveProfile(profile: UserProfile): Promise<void> {
+export async function saveProfile(profile: UserProfile, syncRemote = true): Promise<void> {
   await setItem(STORAGE_KEYS.PROFILE, profile);
   if (profile.userId && profile.userId !== 'guest') {
     const ledger = await getProfileLedger();
     ledger[profile.userId] = profile;
     await setItem(STORAGE_KEYS.PROFILE_LEDGER, ledger);
+    if (syncRemote) await enqueue(profile);
   }
 }

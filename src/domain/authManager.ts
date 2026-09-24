@@ -19,6 +19,7 @@ import { cancelAllNotifications } from './notificationScheduler';
 import { resolveSubscriptionForUser } from './subscriptionManager';
 import { saveProfile, getLedgerProfile } from './profileManager';
 import { restoreActiveSessionFromLedger } from './activeSessionLedger';
+import { restoreQueueForUser, stashQueueForUser } from '../data/syncQueue';
 
 const DEFAULT_PLAN_ID = 'plan-16-8';
 
@@ -30,6 +31,7 @@ const PRESERVED_KEYS: string[] = [
   STORAGE_KEYS.SUBSCRIPTION_LEDGER,
   STORAGE_KEYS.PROFILE_LEDGER,
   STORAGE_KEYS.ACTIVE_SESSION_LEDGER,
+  STORAGE_KEYS.SYNC_QUEUE_LEDGER,
 ];
 
 /**
@@ -60,9 +62,20 @@ async function clearLocalUserData(): Promise<void> {
  * rather than reset to the email prefix.
  */
 async function ensureUserProfile(userId: string, email: string): Promise<void> {
-  const existing =
+  const local =
     (await getItem<Partial<UserProfile>>(STORAGE_KEYS.PROFILE)) ??
     (await getLedgerProfile(userId));
+  let remote: Partial<UserProfile> | null = null;
+  try {
+    const { data, error } = await supabase.from('profiles').select('*').eq('userId', userId).maybeSingle();
+    if (!error) remote = data as Partial<UserProfile> | null;
+  } catch {
+    // Offline startup continues from the per-user local ledger.
+  }
+  const existing = local && remote
+    ? (local.updatedAt ?? '') > (remote.updatedAt ?? '') ? local : remote
+    : local ?? remote;
+  const shouldSync = !remote || (!!local && (local.updatedAt ?? '') > (remote.updatedAt ?? ''));
   const now = new Date().toISOString();
 
   const displayName =
@@ -81,10 +94,10 @@ async function ensureUserProfile(userId: string, email: string): Promise<void> {
     themePreference: existing?.themePreference ?? 'system',
     onboardingCompleted: existing?.onboardingCompleted ?? false,
     createdAt: existing?.createdAt ?? now,
-    updatedAt: now,
+    updatedAt: existing?.updatedAt ?? now,
   };
 
-  await saveProfile(profile);
+  await saveProfile(profile, shouldSync);
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -217,6 +230,7 @@ export async function register(email: string, password: string): Promise<AuthRes
     _currentSession = session;
     _isGuestMode = false;
     await removeItem(STORAGE_KEYS.GUEST_MODE);
+    await restoreQueueForUser(session.userId);
     await ensureUserProfile(session.userId, session.email);
     await resolveSubscriptionForUser(session.userId, session.email);
     await restoreActiveSessionFromLedger(session.userId);
@@ -265,6 +279,7 @@ export async function login(email: string, password: string): Promise<AuthResult
     _currentSession = session;
     _isGuestMode = false;
     await removeItem(STORAGE_KEYS.GUEST_MODE);
+    await restoreQueueForUser(session.userId);
     await ensureUserProfile(session.userId, session.email);
     await resolveSubscriptionForUser(session.userId, session.email);
     await restoreActiveSessionFromLedger(session.userId);
@@ -281,6 +296,7 @@ export async function login(email: string, password: string): Promise<AuthResult
  * Requirement 1.5
  */
 export async function logout(): Promise<void> {
+  await stashQueueForUser(getCurrentUserId());
   try {
     await supabase.auth.signOut();
   } catch {
@@ -326,6 +342,7 @@ export async function restoreSession(): Promise<AuthSession | null> {
 
     _currentSession = session;
     _isGuestMode = false;
+    await restoreQueueForUser(session.userId);
     await ensureUserProfile(session.userId, session.email);
     await resolveSubscriptionForUser(session.userId, session.email);
     await restoreActiveSessionFromLedger(session.userId);

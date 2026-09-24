@@ -284,43 +284,21 @@ export function checkClockIntegrity(
 }
 
 /**
- * Checks for a suspicious forward clock jump.
- *
- * Compares the wall clock delta (time since last timer check) against the
- * expected elapsed time based on the timer's perspective. If the wall clock
- * advanced more than 10 minutes beyond what the timer expected, the jump is
- * flagged as suspicious.
- *
- * Detection logic:
- * - wallClockDelta = now - lastTimerCheckUtc (how much wall time passed since last check)
- * - expectedElapsedSinceLastCheck = (now - session.startTime) - lastKnownElapsedMs
- *   (how much time the timer thinks should have passed since last check)
- * - If wallClockDelta - expectedElapsedSinceLastCheck > 10 minutes → suspicious
- *
- * In normal operation these values are equal. A forward clock jump makes
- * wallClockDelta much larger than expectedElapsedSinceLastCheck.
- *
- * Validates: Requirement 6.7
+ * Compares wall-clock advancement with an independent monotonic interval.
+ * Both readings must come from the same running process. Persisted wall-clock
+ * timestamps alone cannot reveal a forward jump because the two differences
+ * cancel out algebraically.
  */
 export function checkForwardClockJump(
-  session: FastingSession,
   now: Date,
   lastTimerCheckUtc: Date,
-  lastKnownElapsedMs: number,
+  monotonicDeltaMs: number,
 ): ForwardJumpResult {
-  const TEN_MINUTES_MS = 10 * 60 * 1000;
-
   const wallClockDelta = now.getTime() - lastTimerCheckUtc.getTime();
-  const currentElapsedMs = now.getTime() - new Date(session.startTime).getTime();
-  const expectedElapsedSinceLastCheck = currentElapsedMs - lastKnownElapsedMs;
-
-  const jumpMs = wallClockDelta - expectedElapsedSinceLastCheck;
-
-  if (jumpMs > TEN_MINUTES_MS) {
-    return { suspicious: true, jumpMs };
-  }
-
-  return { suspicious: false };
+  const jumpMs = wallClockDelta - monotonicDeltaMs;
+  return jumpMs > 10 * 60 * 1000
+    ? { suspicious: true, jumpMs }
+    : { suspicious: false };
 }
 
 /**
@@ -358,4 +336,10 @@ export async function isClockSuspect(sessionId: string): Promise<boolean> {
  */
 export async function clearClockSuspect(sessionId: string): Promise<void> {
   await removeItem(clockSuspectKey(sessionId));
+}
+
+/** Exclude unconfirmed clock changes from streak calculations. */
+export async function verifiedSessions(sessions: FastingSession[]): Promise<FastingSession[]> {
+  const flags = await Promise.all(sessions.map((session) => isClockSuspect(session.sessionId)));
+  return sessions.filter((_, index) => !flags[index]);
 }

@@ -16,6 +16,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { DailyStats } from '../models/index';
 import { getItem, setItem } from '../data/localStorage';
+import { enqueue } from '../data/syncQueue';
 import { dailyStatsKey, STORAGE_KEYS } from '../utils/constants';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -145,5 +146,6 @@ export async function saveDailyStats(
   }
 
   await setItem(key, record);
+  await enqueue(record);
   return record;
 }

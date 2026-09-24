@@ -5,6 +5,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { FastingSession, FastingPlan } from '../models/index';
 import { ALL_PREDEFINED_PLANS } from '../models/plans';
+import { verifiedSessions } from '../domain/fastingTimer';
 import { recomputeStreaks, isQualifyingFast } from '../domain/streakEngine';
 import { getSubscriptionStatus, hasProAccess } from '../domain/subscriptionManager';
 import { getItem } from '../data/localStorage';
@@ -142,7 +143,7 @@ export function StreaksScreen({
         const history = await getItem<FastingSession[]>(STORAGE_KEYS.SESSION_HISTORY);
         const status = await getSubscriptionStatus();
         if (!active) return;
-        if (history) setSessions(history);
+        if (history) setSessions(await verifiedSessions(history));
         setIsPro(hasProAccess(status.tier));
       })();
       return () => {
